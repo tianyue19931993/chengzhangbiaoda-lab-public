@@ -65,7 +65,7 @@ export default function UploadPage() {
     
     try {
       // 模拟用户 ID（实际应该从登录系统获取）
-      const userId = 'demo-user-' + Date.now();
+      const userId = crypto.randomUUID();
       
       // 上传文件
       const formData = new FormData();
