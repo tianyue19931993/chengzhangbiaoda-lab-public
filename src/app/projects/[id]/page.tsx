@@ -679,10 +679,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-2">
               🎞️ 九宫格分镜
             </h2>
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500 font-bold">
                 {completedCount}/9 张
               </span>
+              {/* ✅ 保留：一键出分镜图按钮 */}
+              <button
+                onClick={generateAllImages}
+                className={`px-6 py-3 rounded-xl font-bold transition-colors ${
+                  completedCount === 9
+                    ? 'bg-green-500 text-white hover:bg-green-600'
+                    : 'bg-purple-500 text-white hover:bg-purple-600'
+                }`}
+              >
+                {completedCount === 9 ? '✅ 全部完成' : '🎨 一键出分镜图'}
+              </button>
             </div>
           </div>
 
@@ -743,9 +754,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
           {/* 免费次数提示 */}
           {!video && !generatingVideo && (
-            <p className="text-xs text-gray-400 mt-3 text-center">
-              🎁 每项目免费生成 1 次视频，后续需支付 ¥9.9（本期仅预留接口）
-            </p>
+            <div className="mt-6 flex items-center justify-center gap-4">
+              {/* ✅ 保留：生成视频按钮 */}
+              <button
+                onClick={generateVideo}
+                disabled={!canGenerateVideo || generatingVideo}
+                className={`px-8 py-3 rounded-2xl font-bold transition-colors ${
+                  canGenerateVideo
+                    ? 'bg-orange-500 text-white hover:bg-orange-600'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {generatingVideo ? '⏳ 生成中...' : '🎬 生成视频'}
+              </button>
+              <p className="text-xs text-gray-400">
+                🎁 每项目免费生成 1 次视频，后续需支付 ¥9.9（本期仅预留接口）
+              </p>
+            </div>
           )}
           {video?.url && (
             <div className="mt-4 text-center">
