@@ -98,7 +98,7 @@ export default function UploadPage() {
           {/* ── 小朋友名字 ────────────────────────────── */}
           <div>
             <label className="block text-xl md:text-2xl font-bold text-gray-800 mb-3">
-              👧 小朋友名字（new）<span className="text-red-500">*</span>
+              👧 小朋友名字d5110c9<span className="text-red-500">*</span>
             </label>
             <input
               type="text"
