@@ -85,12 +85,9 @@ export async function POST(request: NextRequest) {
     // ✅ 修复：使用 Promise 但不 await，确保调用发出即可
     (async () => {
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (() => {
-          // 自动推断 origin（Vercel 部署时会自动获取）
-          const proto = request.headers.get('x-forwarded-proto') || 'https';
-          const host = request.headers.get('host');
-          return host ? `${proto}://${host}` : 'http://localhost:3000';
-        })();
+        // ✅ 从当前请求 URL 推断 baseUrl（Vercel 兼容）
+        const urlObj = new URL(request.url);
+        const baseUrl = `${urlObj.protocol}//${urlObj.host}`;
         const url = `${baseUrl}/api/generate-story`;
         console.log(`🚀 调用 generate-story: ${url}`);
         const resp = await fetch(url, {
