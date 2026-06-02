@@ -298,7 +298,7 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {/* ===== 九宫格分镜图 ===== */}
+          {/* ===== 九宫格分镜图（16:9）===== */}
           <div className="mb-12">
             <h3 className="text-2xl font-bold text-gray-800 mb-6">
               🎨 九宫格分镜
@@ -308,16 +308,17 @@ export default function ProjectDetailPage() {
               {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => {
                 const image = project.images?.find(img => img.order_index === index);
                 const hasImage = image && image.url;
+                const prompt = storyData.prompts[index] || `分镜 ${index + 1}`;
                 
                 return (
                   <div key={index} className="relative group">
-                    {/* 图片或空位 */}
+                    {/* 图片或空位 - 16:9 比例 */}
                     {hasImage ? (
                       <>
                         <img
                           src={image.url}
                           alt={`分镜 ${index + 1}`}
-                          className="w-full aspect-square rounded-2xl shadow-lg object-cover"
+                          className="w-full aspect-video rounded-2xl shadow-lg object-cover"
                         />
                         {/* 重生按钮 */}
                         {(image.regeneration_count ?? 0) < 1 && (
@@ -331,21 +332,25 @@ export default function ProjectDetailPage() {
                         )}
                       </>
                     ) : (
-                      /* 空位占符 */
-                      <div className="w-full aspect-square rounded-2xl bg-gray-100 border-3 border-dashed border-gray-300 flex flex-col items-center justify-center">
-                        <div className="text-5xl mb-2 opacity-30">🖼️</div>
+                      /* 空位占符 - 16:9 */
+                      <div className="w-full aspect-video rounded-2xl bg-gray-100 border-3 border-dashed border-gray-300 flex flex-col items-center justify-center">
+                        <div className="text-4xl mb-1 opacity-30">🖼️</div>
                         <span className="text-sm text-gray-400">分镜 {index + 1}</span>
-                        <span className="text-xs text-gray-300 mt-1">待生成</span>
                       </div>
                     )}
 
-                    {/* 底部状态栏 */}
-                    <div className="mt-2 text-center text-xs text-gray-500">
-                      {hasImage ? (
-                        <span>已生成 · 剩余重生机会：{1 - (image.regeneration_count ?? 0)}</span>
-                      ) : (
-                        <span>等待 AI 生成</span>
-                      )}
+                    {/* 提示词显示 */}
+                    <div className="mt-2 px-1">
+                      <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed" title={prompt}>
+                        📝 {prompt}
+                      </p>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {hasImage ? (
+                          <span>✅ 已生成 · 剩余重生：{1 - (image.regeneration_count ?? 0)}</span>
+                        ) : (
+                          <span>⏳ 待生成</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
