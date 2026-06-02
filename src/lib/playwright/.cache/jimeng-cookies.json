@@ -1,0 +1,110 @@
+[
+  {
+    "name": "fpk1",
+    "value": "2c2005a932df568087a4e0e3eb6bea656103a74d5f33f5120a213f0395e4cc366115a6547c5cd0ad0f31dd61608a7a8a",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "user_device_id",
+    "value": "4f7d791e57884dbeb4fa7c001eb0a0ac",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "_v2_spipe_web_id",
+    "value": "7540478416559145001",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "COOKIE_CONSENT_PROMPT_CONFIG",
+    "value": "{%22status%22:1%2C%22settings%22:{%22firstPartyAnalytics%22:true%2C%22GoogleAnalytics%22:true}%2C%22updatedTime%22:1768956761624}",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "user_device_id_timestamp",
+    "value": "1772410286428",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "passport_csrf_token",
+    "value": "5ef7a96c44947cc1e48b8dbf8ceb6f37",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "passport_csrf_token_default",
+    "value": "5ef7a96c44947cc1e48b8dbf8ceb6f37",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "_tea_utm_cache_513695",
+    "value": "{%22utm_source%22:%22header%22%2C%22utm_medium%22:%22jyweb%22}",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "DREAMINA_CLI_TOP_BAR_CLOSED",
+    "value": "true",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "s_v_web_id",
+    "value": "verify_mojxp6x5_NIVuHc2K_odeX_4Zhu_B9oc_IKA1fpnS9cVF",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "user_spaces_idc",
+    "value": "{\"7615666698687480883\":\"lf\"}",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "dm_auid",
+    "value": "PMc+DTvz9eP7Omo3vzwdISoc0gtx5+Ao688f3IgkQz8=",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "uifid_temp",
+    "value": "02a08fea247509d84a38b6d4fc0393d01e070067232278d5bfcc0002c3f25d93b8931014ffc187cad38538f2e68023c620cec0c8847e1a5be5f4a2715d7d01ecc9246b1fbb1e12b940c32e1e69b9f7515f1f4c4c07022081bf30e36c577cbb0e670fb451325da2aa4b9baaf7940d0ec8",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "uifid",
+    "value": "02a08fea247509d84a38b6d4fc0393d01e070067232278d5bfcc0002c3f25d93b8931014ffc187cad38538f2e68023c6e5673e21d0e1c2da2c347d7c3b394e628aac3e2e2d5341eb26d917435ff1bc2e8e788a874f3291800bbd65a4666676f7662815ceabe8129217d52bf349dd0a311a448e7d98dbdae753e54e0849b0359b3de95bc0c4980582ff89be56c51da1f3f19cd851a73760b9310bfff5454f04ee490ae9f33f90056fbca80cb77481fc8c33a79568ec2ddacb992914b707c317d1",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "_tea_web_id",
+    "value": "7517853345424442917",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "DREAMINA_THEME",
+    "value": "light",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "_uetsid",
+    "value": "2dfd34c05e1f11f18356afa66c8bdccd",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  },
+  {
+    "name": "_uetvid",
+    "value": "923a9f004d7e11f0acd95de633062fd7",
+    "domain": ".jimeng.jianying.com",
+    "path": "/"
+  }
+]
