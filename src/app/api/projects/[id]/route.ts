@@ -92,23 +92,51 @@ export async function PATCH(
     if (title       !== undefined) updates.title       = title;
     if (style_id    !== undefined) updates.style_id    = style_id;
     if (status      !== undefined) updates.status      = status;
-    // 兼容 story 或 story_content
-    const finalStory = story_content !== undefined ? story_content : story;
-    if (finalStory  !== undefined) updates.story       = finalStory;
 
-    // 更新 projects 表
+    // 更新 projects 表的 story 字段 + stories 表（如果传了 story_content 或 story）
+    const finalStoryBody = story_content !== undefined ? story_content : story;
+    if (finalStoryBody !== undefined) {
+      updates.story = finalStoryBody;
+    }
+
     if (Object.keys(updates).length > 0) {
-      const { error: projErr } = await supabaseAdmin
+      const { error: projErr2 } = await supabaseAdmin
         .from('projects')
         .update(updates)
         .eq('id', id);
 
-      if (projErr) return NextResponse.json({ success: false, error: projErr.message }, { status: 500 });
+      if (projErr2) return NextResponse.json({ success: false, error: projErr2.message }, { status: 500 });
     }
 
-    // 更新 stories 表（如果传了 story_content 或 story）
-    const finalStory = story_content !== undefined ? story_content : story;
-    if (finalStory !== undefined) {
+    // 更新 stories 表（如果传了故事内容）
+    if (finalStoryBody !== undefined) {
+      let storyId = (await supabaseAdmin.from('projects').select('story_id').eq('id', id).single())?.data?.story_id;
+
+      if (storyId) {
+        // 已有 story 记录，更新
+        await supabaseAdmin.from('stories').update({ content: finalStoryBody }).eq('id', storyId);
+      } else {
+        // 新建 story 记录
+        const { data: newStory } = await supabaseAdmin.from('stories').insert({
+          project_id: id,
+          content: finalStoryBody,
+          title: title ?? '未命名故事',
+        }).select('id').single();
+        if (newStory?.id) {
+          await supabaseAdmin.from('projects').update({ story_id: newStory.id }).eq('id', id);
+        }
+      }
+    }
+
+    // 更新 hero_designs 表（upsert，兼容 hero_design 或 hero_designs）
+    if (hero_designs) {
+      const hd = typeof hero_designs === 'string' ? JSON.parse(hero_designs) : hero_designs;
+      const { error: heroErr } = await supabaseAdmin
+        .from('hero_designs')
+        .upsert({ project_id: id, ...hd }, { onConflict: 'project_id' });
+
+      if (heroErr) console.error('⚠️ hero_design 更新失败:', heroErr);
+    }
 
     // 重新查询完整数据返回
     const { data: project } = await supabaseAdmin
