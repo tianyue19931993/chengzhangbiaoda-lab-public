@@ -116,11 +116,18 @@ export async function POST(request: NextRequest) {
     );
     if (sbErr) console.error('⚠️ storyboard_items 写入失败:', sbErr);
 
-    // 3) 更新 projects 表
+    // 3) stories 表（写入故事正文）
+    const { data: storyRow } = await supabaseAdmin.from('stories').insert({
+      project_id: projectId,
+      title:     title,
+      content:   storyText,
+    }).select('id').single();
+
+    // 4) 更新 projects 表（story_id 关联）
     const { error: projErr } = await supabaseAdmin.from('projects').update({
-      title:  title,
-      story:  storyText,
-      status: 'story_done',
+      title:     title,
+      story_id:  storyRow?.id ?? null,
+      status:    'story_done',
     }).eq('id', projectId);
     if (projErr) console.error('⚠️ projects 更新失败:', projErr);
 

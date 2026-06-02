@@ -29,6 +29,16 @@ INSERT INTO styles (id, name, prompt) VALUES
   ('cyberpunk', '🌃 赛博朋克',        'cyberpunk style, futuristic neon city, glowing holograms, sci-fi atmosphere, high-tech environment, neon lighting, cinematic cyberpunk aesthetic, purple and blue neon, digital world, futuristic character design, dramatic lighting, rainy cyberpunk city, glowing particles, high contrast, sci-fi cinematic composition, Blade Runner inspired, ultra detailed')
 ON CONFLICT (id) DO NOTHING;
 
+-- ---------- 故事表 (stories) ----------
+CREATE TABLE IF NOT EXISTS stories (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  project_id  UUID REFERENCES projects(id) ON DELETE CASCADE,
+  title       TEXT,
+  content     TEXT NOT NULL DEFAULT '',
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ---------- 项目表 (projects) ----------
 -- 状态说明：
 --   drafting       已创建（草稿）
@@ -41,8 +51,9 @@ CREATE TABLE IF NOT EXISTS projects (
   child_name        TEXT NOT NULL DEFAULT '小朋友',
   style_id          TEXT REFERENCES styles(id) DEFAULT 'pixar',
   uploaded_image    TEXT,   -- original-image URL
-  title             TEXT,   -- 故事标题
-  story             TEXT,   -- 故事正文
+  title             TEXT,   -- 项目/故事标题（用户可编辑）
+  story_id          UUID REFERENCES stories(id) ON DELETE SET NULL,  -- 关联 stories 表
+  story             TEXT,   -- 兼容旧数据（已废弃，新数据用 stories 表）
   video_prompt      TEXT,   -- 视频生成 Prompt
   status            TEXT DEFAULT 'drafting'
                     CHECK (status IN ('drafting','story_done','storyboard_done','video_done','failed')),
@@ -96,23 +107,27 @@ RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;
 
+CREATE TRIGGER trg_stories_updated   BEFORE UPDATE ON stories   ON EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_projects_updated  BEFORE UPDATE ON projects  ON EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER trg_videos_updated   BEFORE UPDATE ON videos   ON EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ---------- 索引 ----------
 CREATE INDEX IF NOT EXISTS idx_projects_user_id     ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_status       ON projects(status);
+CREATE INDEX IF NOT EXISTS idx_projects_story_id     ON projects(story_id);
+CREATE INDEX IF NOT EXISTS idx_stories_project       ON stories(project_id);
 CREATE INDEX IF NOT EXISTS idx_hero_designs_project  ON hero_designs(project_id);
 CREATE INDEX IF NOT EXISTS idx_storyboard_project    ON storyboard_items(project_id);
 CREATE INDEX IF NOT EXISTS idx_storyboard_sort       ON storyboard_items(project_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_videos_project        ON videos(project_id);
 
 -- ---------- RLS ----------
-ALTER TABLE users           ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projects        ENABLE ROW LEVEL SECURITY;
-ALTER TABLE hero_designs   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stories          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projects         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hero_designs     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE storyboard_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE videos         ENABLE ROW LEVEL SECURITY;
-ALTER TABLE styles         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE videos           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE styles           ENABLE ROW LEVEL SECURITY;
 
 -- service_role 绕过所有 RLS（本项目 serverless API 使用 service_role key）

@@ -12,16 +12,6 @@ export async function GET(
   try {
     const { id } = await params;
 
-    // ── DEBUG: 先简单查询，看看到底什么情况 ──
-    const { data: allProjects, error: listErr } = await supabaseAdmin
-      .from('projects')
-      .select('id, status, created_at')
-      .limit(5);
-
-    console.log('🔍 [DEBUG] 所有项目:', JSON.stringify(allProjects));
-    console.log('🔍 [DEBUG] listErr:', JSON.stringify(listErr));
-    console.log('🔍 [DEBUG] 查询的 id:', id);
-
     // 先单独查项目主表（确保一定能拿到）
     const { data: projectRow, error: projErr } = await supabaseAdmin
       .from('projects')
@@ -29,13 +19,10 @@ export async function GET(
       .eq('id', id)
       .single();
 
-    console.log('🔍 [DEBUG] projectRow:', JSON.stringify(projectRow));
-    console.log('🔍 [DEBUG] projErr:', JSON.stringify(projErr));
-
     if (projErr || !projectRow) {
       return NextResponse.json({ 
         success: false, 
-        error: `项目不存在 | debug: ${projErr?.message}` 
+        error: `项目不存在 | debug: ${String(projErr ?? '')}` 
       }, { status: 404 });
     }
 
@@ -53,18 +40,17 @@ export async function GET(
       videos: videoRes.data ?? null,
     };
 
-    console.log('🔍 [DEBUG] projectRow:', JSON.stringify(projectRow));
-    console.log('🔍 [DEBUG] projErr:', JSON.stringify(projErr));
-    console.log('🔍 [DEBUG] hero_designs:', JSON.stringify(heroRes.data));
-    console.log('🔍 [DEBUG] storyboard_items count:', storyRes.data?.length);
-    console.log('🔍 [DEBUG] videos:', JSON.stringify(videoRes.data));
-
-    if (projErr || !projectRow) {
-      return NextResponse.json({ 
-        success: false, 
-        error: `项目不存在 | debug: ${String(projErr ?? '')}` 
-      }, { status: 404 });
+    // 如果有关联 story_id，查询 stories 表获取正文
+    let storyContent = projectRow.story;
+    if (projectRow.story_id) {
+      const { data: storyRow } = await supabaseAdmin
+        .from('stories')
+        .select('content')
+        .eq('id', projectRow.story_id)
+        .maybeSingle();
+      if (storyRow) storyContent = storyRow.content;
     }
+    (project as any).story_content = storyContent;
 
     return NextResponse.json({ success: true, data: { project } });
   } catch (err: any) {
@@ -80,13 +66,12 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
-    const { title, story, style_id, hero_design, status } = body;
+    const { title, story_content, style_id, hero_design, status } = body;
     const updates: Record<string, any> = {};
 
-    if (title      !== undefined) updates.title      = title;
-    if (story      !== undefined) updates.story      = story;
-    if (style_id   !== undefined) updates.style_id   = style_id;
-    if (status     !== undefined) updates.status     = status;
+    if (title       !== undefined) updates.title       = title;
+    if (style_id    !== undefined) updates.style_id    = style_id;
+    if (status      !== undefined) updates.status      = status;
 
     // 更新 projects 表
     if (Object.keys(updates).length > 0) {
@@ -96,6 +81,26 @@ export async function PATCH(
         .eq('id', id);
 
       if (projErr) return NextResponse.json({ success: false, error: projErr.message }, { status: 500 });
+    }
+
+    // 更新 stories 表（如果传了 story_content）
+    if (story_content !== undefined) {
+      let storyId = (await supabaseAdmin.from('projects').select('story_id').eq('id', id).single())?.data?.story_id;
+
+      if (storyId) {
+        // 已有 story 记录，更新
+        await supabaseAdmin.from('stories').update({ content: story_content }).eq('id', storyId);
+      } else {
+        // 新建 story 记录
+        const { data: newStory } = await supabaseAdmin.from('stories').insert({
+          project_id: id,
+          content: story_content,
+          title: title ?? '未命名故事',
+        }).select('id').single();
+        if (newStory?.id) {
+          await supabaseAdmin.from('projects').update({ story_id: newStory.id }).eq('id', id);
+        }
+      }
     }
 
     // 更新 hero_designs 表（upsert）
@@ -111,16 +116,28 @@ export async function PATCH(
     // 重新查询完整数据返回
     const { data: project } = await supabaseAdmin
       .from('projects')
-      .select(`
-        *,
-        hero_designs(*),
-        storyboard_items(* order by sort_order),
-        videos(*)
-      `)
+      .select('*')
       .eq('id', id)
       .single();
 
-    return NextResponse.json({ success: true, data: { project } });
+    let finalStory = project?.story;
+    if (project?.story_id) {
+      const { data: sr } = await supabaseAdmin.from('stories').select('content').eq('id', project.story_id).maybeSingle();
+      if (sr) finalStory = sr.content;
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      data: { 
+        project: { 
+          ...project, 
+          hero_designs: (await supabaseAdmin.from('hero_designs').select('*').eq('project_id', id).maybeSingle()).data ?? null,
+          storyboard_items: (await supabaseAdmin.from('storyboard_items').select('*').eq('project_id', id).order('sort_order', { ascending: true })).data ?? [],
+          videos: (await supabaseAdmin.from('videos').select('*').eq('project_id', id).maybeSingle()).data ?? null,
+          ...(finalStory !== undefined && { _story_content: finalStory }),
+        } 
+      } 
+    });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }

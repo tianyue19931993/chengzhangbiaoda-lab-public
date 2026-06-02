@@ -34,6 +34,7 @@ interface Project {
   child_name: string;
   title: string;
   story: string;
+  story_content?: string;
   style_id: string;
   uploaded_image: string;
   status: string;
@@ -327,7 +328,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       setProject(p);
       setEditingTitle(p.title ?? '');
-      setEditingStory(p.story ?? '');
+      setEditingStory((p as any).story_content ?? p.story ?? '');
       setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
     } catch (e: any) {
       setError(e.message);
@@ -357,7 +358,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       const res  = await fetch(`/api/projects/${projectId}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ title: editingTitle, story: editingStory }),
+        body:    JSON.stringify({ title: editingTitle, story_content: editingStory }),
       });
       const data = await res.json();
       if (data.success) {
@@ -502,24 +503,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">只读</span>
           </div>
 
-          {/* 故事标题 */}
-          <div className="mb-4">
-            <label className="block text-sm font-bold text-gray-600 mb-1">故事标题</label>
-            <input
-              type="text"
-              value={editingTitle}
-              onChange={(e) => setEditingTitle(e.target.value)}
-              className="w-full border-2 border-purple-200 rounded-xl px-4 py-3 text-xl font-bold focus:border-purple-500 focus:outline-none transition-colors"
-            />
-          </div>
-
           {/* 故事正文 */}
           <div className="mb-4">
             <label className="block text-sm font-bold text-gray-600 mb-1">故事正文</label>
             <textarea
               value={editingStory}
               onChange={(e) => setEditingStory(e.target.value)}
-              rows={6}
+              rows={8}
               className="w-full border-2 border-purple-200 rounded-xl px-4 py-3 text-base leading-relaxed focus:border-purple-500 focus:outline-none transition-colors resize-y"
             />
           </div>
