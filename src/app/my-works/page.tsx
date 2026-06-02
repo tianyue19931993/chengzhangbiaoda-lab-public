@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import KidButton from '@/components/KidButton';
+import { formatDateTime } from '@/lib/utils';
 
 interface Project {
   id: string;
@@ -150,7 +151,7 @@ export default function MyWorksPage() {
                     </div>
                     
                     <div className="text-gray-400 text-sm">
-                        创建时间: {new Date(project.created_at).toLocaleDateString('zh-CN')}
+                        创建时间: {formatDateTime(project.created_at)}
                       </div>
                   </div>
                 </div>

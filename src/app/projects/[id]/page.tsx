@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import KidButton from '@/components/KidButton';
+import { formatDateTime } from '@/lib/utils';
 
 interface Project {
   id: string;
@@ -232,7 +233,7 @@ export default function ProjectDetailPage() {
               </div>
             )}
             <p className="text-gray-500 mt-2">
-              创建于 {new Date(project.created_at).toLocaleDateString('zh-CN')}
+              创建于 {formatDateTime(project.created_at)}
             </p>
           </div>
 
