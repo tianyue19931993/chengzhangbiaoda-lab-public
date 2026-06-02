@@ -85,7 +85,33 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      console.log('🟡 DOUBAO_API_KEY 未配置，使用默认故事数据');
+      console.log('🟡 DOUBAO_API_KEY 未配置，从数据库读取默认值');
+
+      // 读取默认角色设定（is_default=true）
+      const { data: dbHero } = await supabaseAdmin
+        .from('hero_designs')
+        .select('*')
+        .eq('is_default', true)
+        .maybeSingle();
+      if (dbHero) {
+        heroDesign = {
+          name:    dbHero.name    ?? DEFAULT_HERO_DESIGN.name,
+          species: dbHero.species ?? DEFAULT_HERO_DESIGN.species,
+          color:   dbHero.color   ?? DEFAULT_HERO_DESIGN.color,
+          costume: dbHero.costume ?? DEFAULT_HERO_DESIGN.costume,
+          prop:    dbHero.prop    ?? DEFAULT_HERO_DESIGN.prop,
+        };
+      }
+
+      // 读取默认故事正文（is_default=true）
+      const { data: dbStory } = await supabaseAdmin
+        .from('stories')
+        .select('content')
+        .eq('is_default', true)
+        .maybeSingle();
+      if (dbStory) {
+        storyText = dbStory.content;
+      }
     }
 
     // ── 构建 9 条分镜 Prompt ──────────────────────────────
