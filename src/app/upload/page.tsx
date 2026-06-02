@@ -50,6 +50,17 @@ export default function UploadPage() {
     const f = e.target.files?.[0]; if (f) processFile(f);
   };
 
+  // ── 获取或创建 userId（保存在 localStorage）────────────────────────────
+  const getUserId = () => {
+    if (typeof window === 'undefined') return '';
+    let userId = localStorage.getItem('mr_user_id');
+    if (!userId) {
+      userId = crypto.randomUUID();
+      localStorage.setItem('mr_user_id', userId);
+    }
+    return userId;
+  };
+
   const handleUpload = async () => {
     if (!selectedFile) { alert('请先选择一张图片！'); return; }
     if (!childName.trim()) { alert('请填写小朋友的名字！'); return; }
@@ -58,7 +69,7 @@ export default function UploadPage() {
     setProgress('📤 正在上传图片...');
 
     try {
-      const userId = crypto.randomUUID();
+      const userId = getUserId();
       const formData = new FormData();
       formData.append('file',      selectedFile);
       formData.append('userId',    userId);

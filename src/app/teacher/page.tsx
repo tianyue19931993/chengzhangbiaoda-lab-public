@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import KidButton from '@/components/KidButton';
 import { formatDate } from '@/lib/utils';
 
 interface StoryboardItem { id: string; image_url: string | null; sort_order: number; }
@@ -35,27 +34,23 @@ const STYLE_NAMES: Record<string, string> = {
   cyberpunk: '🌃 赛博朋克',
 };
 
-export default function MyWorksPage() {
+export default function TeacherPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
 
-  useEffect(() => { loadProjects(); }, []);
+  useEffect(() => { loadAllProjects(); }, []);
 
-  const loadProjects = async () => {
+  const loadAllProjects = async () => {
     setLoading(true);
+    setError('');
     try {
-      // ✅ 从 localStorage 读取 userId
-      const userId = typeof window !== 'undefined' ? localStorage.getItem('mr_user_id') : null;
-      if (!userId) {
-        console.log('⚠️ 未找到 userId，请先上传作品');
-        setLoading(false);
-        return;
-      }
-      const res  = await fetch(`/api/projects?userId=${userId}`);
+      const res  = await fetch('/api/teacher/projects');
       const data = await res.json();
       if (data.success) setProjects(data.data.projects);
-    } catch (e) {
-      console.error('加载失败', e);
+      else setError(data.error ?? '加载失败');
+    } catch (e: any) {
+      setError(e.message ?? '网络错误');
     } finally {
       setLoading(false);
     }
@@ -69,51 +64,70 @@ export default function MyWorksPage() {
   };
 
   if (loading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-orange-100 to-red-100">
       <div className="text-6xl animate-bounce mb-4">⏳</div>
-      <p className="text-2xl text-purple-600 font-bold">加载中...</p>
+      <p className="text-2xl text-orange-600 font-bold">加载中...</p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-b from-orange-100 to-red-100 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
 
         {/* 标题 */}
-        <h1 className="text-3xl md:text-5xl font-bold text-center text-purple-600 mb-8 md:mb-12">
-          📺 我的作品
-        </h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl md:text-5xl font-bold text-orange-600">
+            👨‍🏫 老师端 - 全量作品
+          </h1>
+          <Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-orange-700 hover:bg-white transition-colors shadow">
+            返回首页
+          </Link>
+        </div>
 
-        {/* 空状态 */}
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-2xl mb-6">
+            <p className="text-red-800 font-bold">❌ {error}</p>
+          </div>
+        )}
+
+        {/* 统计信息 */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+          {[
+            { label: '总作品数', value: projects.length, color: 'from-blue-400 to-blue-600' },
+            { label: '故事完成', value: projects.filter(p => p.status === 'story_done').length, color: 'from-green-400 to-green-600' },
+            { label: '分镜完成', value: projects.filter(p => p.status === 'storyboard_done').length, color: 'from-purple-400 to-purple-600' },
+            { label: '视频完成', value: projects.filter(p => p.status === 'video_done').length, color: 'from-orange-400 to-orange-600' },
+            { label: '失败', value: projects.filter(p => p.status === 'failed').length, color: 'from-red-400 to-red-600' },
+          ].map(({ label, value, color }) => (
+            <div key={label} className={`bg-gradient-to-r ${color} rounded-2xl p-4 text-white shadow-lg`}>
+              <p className="text-3xl font-bold">{value}</p>
+              <p className="text-sm opacity-90">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* 作品列表 */}
         {projects.length === 0 ? (
           <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 text-center">
-            <div className="text-6xl md:text-8xl mb-4">🎨</div>
+            <div className="text-6xl md:text-8xl mb-4">📭</div>
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">还没有作品</h2>
-            <p className="text-lg text-gray-600 mb-8">上传你的第一张创意画，开始创作吧！</p>
-            <Link href="/upload">
-              <KidButton className="bg-gradient-to-r from-pink-400 to-purple-400 text-white text-xl">
-                🚀 开始创作
-              </KidButton>
-            </Link>
+            <p className="text-lg text-gray-600">等待小朋友们上传第一幅作品吧！</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {projects.map((p) => {
               const cover = coverImage(p);
               const info  = STATUS_MAP[p.status] ?? { text: p.status, color: 'bg-gray-100 text-gray-600' };
               return (
                 <Link key={p.id} href={`/projects/${p.id}`} className="block">
                   <div className="bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer">
-                    {/* 封面 */}
-                    <div className="h-36 md:h-48 bg-gradient-to-r from-purple-200 to-pink-200 flex items-center justify-center overflow-hidden">
+                    <div className="h-36 md:h-48 bg-gradient-to-r from-orange-200 to-red-200 flex items-center justify-center overflow-hidden">
                       {cover ? (
                         <img src={cover} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="text-7xl opacity-40">🎨</div>
                       )}
                     </div>
-
-                    {/* 信息 */}
                     <div className="p-4 md:p-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-2 truncate">
                         {p.title || '未命名作品'}
@@ -127,7 +141,7 @@ export default function MyWorksPage() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-purple-600 text-sm font-bold">
+                        <span className="text-orange-600 text-sm font-bold">
                           👧 {p.child_name}
                         </span>
                         <span className="text-gray-400 text-xs">
@@ -142,13 +156,14 @@ export default function MyWorksPage() {
           </div>
         )}
 
-        {/* 返回 */}
-        <div className="mt-8 md:mt-12 text-center">
-          <Link href="/">
-            <KidButton className="bg-gray-400 text-white text-sm px-4 py-2 md:px-6 md:py-3">
-              ← 返回首页
-            </KidButton>
-          </Link>
+        {/* 刷新按钮 */}
+        <div className="mt-8 text-center">
+          <button
+            onClick={loadAllProjects}
+            className="px-8 py-3 bg-orange-500 text-white rounded-2xl font-bold hover:bg-orange-600 transition-colors shadow-lg"
+          >
+            🔄 刷新作品列表
+          </button>
         </div>
       </div>
     </div>

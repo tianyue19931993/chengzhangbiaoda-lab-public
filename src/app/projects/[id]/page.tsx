@@ -570,8 +570,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         {hasAnyApi === false && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-2xl">
             <p className="text-yellow-800 font-bold text-center">
-              ⚠️ 当前未配置 AI API（豆包），所有内容均展示默认示例数据。<br/>
-              配置 <code className="bg-yellow-200 px-1 rounded">DOUBAO_API_KEY</code> 后可生成专属内容。
+              尚未配置API，所有内容均展示默认示例数据
             </p>
           </div>
         )}
@@ -633,21 +632,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             >
               {savingText ? '💾 保存中...' : '💾 保存'}
             </button>
-            {/* 无 API 时也可点击，走降级逻辑 */}
-            <button
-              onClick={generateAllImages}
-              disabled={project.status === 'drafting'}
-              className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-2xl font-bold hover:from-pink-600 hover:to-purple-600 disabled:opacity-40 transition-all text-sm md:text-base shadow-lg"
-            >
-              🎨 一键出分镜图
-            </button>
-            <button
-              onClick={generateVideo}
-              disabled={generatingVideo || (!allImagesDone && !defaultData?.video)}
-              className="px-6 py-3 bg-gradient-to-r from-green-400 to-teal-400 text-white rounded-2xl font-bold hover:from-green-500 hover:to-teal-500 disabled:opacity-40 transition-all text-sm md:text-base shadow-lg"
-            >
-              {generatingVideo ? '⏳ 生成中...' : video?.status === 'processing' ? '🎬 生成中...' : '🎬 生成视频'}
-            </button>
             {saveErr && <span className="text-red-500 text-sm font-bold">❌ {saveErr}</span>}
           </div>
         </section>
@@ -699,13 +683,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <span className="text-sm text-gray-500 font-bold">
                 {completedCount}/9 张
               </span>
-              <button
-                onClick={generateAllImages}
-                disabled={project.status === 'drafting'}
-                className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-2xl font-bold hover:from-pink-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm md:text-base shadow-lg"
-              >
-                🚀 一键出分镜图
-              </button>
             </div>
           </div>
 
@@ -732,18 +709,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         {/* ── 区域 4：动画视频 ───────────────────────────── */}
         <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-2">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-2 mb-6">
               🎬 动画视频
             </h2>
-            <button
-              onClick={generateVideo}
-              disabled={generatingVideo}
-              className="px-6 py-3 bg-gradient-to-r from-green-400 to-teal-400 text-white rounded-2xl font-bold hover:from-green-500 hover:to-teal-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm md:text-base shadow-lg"
-            >
-              {generatingVideo ? '⏳ 生成中...' : video?.status === 'processing' ? '🎬 生成中...' : '🎬 生成视频'}
-            </button>
-          </div>
 
           {/* 视频播放器 / 占位 */}
           <div className="aspect-video bg-gray-100 rounded-2xl overflow-hidden flex items-center justify-center">

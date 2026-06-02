@@ -80,6 +80,44 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ 项目创建成功: ${project.id}，开始触发故事生成...`);
 
+    // ── 同步创建 stories、hero_designs、storyboard_items ───────
+    // ✅ 修复：上传时同步创建关联数据，避免详情页空数据
+    try {
+      // 创建 story 记录
+      const { data: story } = await supabaseAdmin
+        .from('stories')
+        .insert({ project_id: project.id, content: '', status: 'draft' })
+        .select()
+        .single();
+
+      // 创建 hero_design 记录
+      const { data: hero } = await supabaseAdmin
+        .from('hero_designs')
+        .insert({ project_id: project.id, name: '张三', species: '人类', color: '蓝色', costume: '校服', prop: '书包' })
+        .select()
+        .single();
+
+      // 创建 9 条 storyboard_items
+      const storyboardTitles = ['英雄原本生活', '问题出现', '接受任务', '遇到困难', '获得帮助', '开始成长', '真相浮现', '最终挑战', '英雄归来'];
+      const storyboardItems = storyboardTitles.map((title, i) => ({
+        project_id: project.id,
+        sort_order: i + 1,
+        title,
+        description: `第 ${i + 1} 幕：${title}`,
+        prompt: '',
+        image_url: null,
+        status: 'pending',
+      }));
+      const { data: sbItems } = await supabaseAdmin
+        .from('storyboard_items')
+        .insert(storyboardItems)
+        .select();
+
+      console.log(`✅ 同步创建完成: story=${story?.id}, hero=${hero?.id}, storyboard_items=${sbItems?.length ?? 0} 条`);
+    } catch (e: any) {
+      console.error('⚠️ 同步创建关联数据失败（不影响主流程）:', e.message);
+    }
+
     // ── 异步触发故事生成（不阻塞返回） ───────────────────
     // 前端收到 projectId 后立即跳转到详情页，AI 生成在后台进行
     // ✅ 修复：使用 Promise 但不 await，确保调用发出即可
