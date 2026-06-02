@@ -59,10 +59,10 @@ export async function GET(
     console.log('🔍 [DEBUG] storyboard_items count:', storyRes.data?.length);
     console.log('🔍 [DEBUG] videos:', JSON.stringify(videoRes.data));
 
-    if (error || !project) {
+    if (projErr || !projectRow) {
       return NextResponse.json({ 
         success: false, 
-        error: `项目不存在 | debug: listErr=${listErr?.message}, projectCount=${allProjects?.length ?? 0}` 
+        error: `项目不存在 | debug: ${projErr?.message}` 
       }, { status: 404 });
     }
 
