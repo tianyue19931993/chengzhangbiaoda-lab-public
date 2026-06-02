@@ -78,15 +78,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: `创建项目失败: ${projectErr?.message}` }, { status: 500 });
     }
 
-    console.log(`✅ 项目创建成功: ${project.id}`);
+    console.log(`✅ 项目创建成功: ${project.id}，开始触发故事生成...`);
 
     // ── 异步触发故事生成（不阻塞返回） ───────────────────
     // 前端收到 projectId 后立即跳转到详情页，AI 生成在后台进行
-    fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/api/generate-story`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ projectId: project.id, imageUrl: uploadedImage, style: styleId }),
-    }).catch((e) => console.error('⚠️ 触发 generate-story 失败:', e));
+    // ✅ 修复：使用 Promise 但不 await，确保调用发出即可
+    (async () => {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || (() => {
+          // 自动推断 origin（Vercel 部署时会自动获取）
+          const proto = request.headers.get('x-forwarded-proto') || 'https';
+          const host = request.headers.get('host');
+          return host ? `${proto}://${host}` : 'http://localhost:3000';
+        })();
+        const url = `${baseUrl}/api/generate-story`;
+        console.log(`🚀 调用 generate-story: ${url}`);
+        const resp = await fetch(url, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ projectId: project.id, imageUrl: uploadedImage, style: styleId }),
+        });
+        const result = await resp.json();
+        console.log(`✅ generate-story 触发成功:`, result);
+      } catch (e: any) {
+        console.error(`❌ 触发 generate-story 失败:`, e.message, e.stack);
+      }
+    })();
 
     return NextResponse.json({
       success: true,
