@@ -460,7 +460,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       const res  = await fetch(`/api/projects/${projectId}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ hero_design: editingHero }),
+        body:    JSON.stringify({ hero_designs: editingHero }),
       });
       const data = await res.json();
       if (data.success) {

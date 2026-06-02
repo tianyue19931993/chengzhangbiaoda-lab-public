@@ -86,12 +86,15 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
-    const { title, story_content, style_id, hero_design, status } = body;
+    const { title, story_content, story, style_id, hero_designs, status } = body;
     const updates: Record<string, any> = {};
 
     if (title       !== undefined) updates.title       = title;
     if (style_id    !== undefined) updates.style_id    = style_id;
     if (status      !== undefined) updates.status      = status;
+    // 兼容 story 或 story_content
+    const finalStory = story_content !== undefined ? story_content : story;
+    if (finalStory  !== undefined) updates.story       = finalStory;
 
     // 更新 projects 表
     if (Object.keys(updates).length > 0) {
@@ -103,34 +106,55 @@ export async function PATCH(
       if (projErr) return NextResponse.json({ success: false, error: projErr.message }, { status: 500 });
     }
 
-    // 更新 stories 表（如果传了 story_content）
-    if (story_content !== undefined) {
-      let storyId = (await supabaseAdmin.from('projects').select('story_id').eq('id', id).single())?.data?.story_id;
+    // 更新 stories 表（如果传了 story_content 或 story）
+    const finalStory = story_content !== undefined ? story_content : story;
+    if (finalStory !== undefined) {
+      // 先查是否已有 story 记录
+      const { data: existingStory } = await supabaseAdmin
+        .from('stories')
+        .select('id')
+        .eq('project_id', id)
+        .maybeSingle();
 
-      if (storyId) {
-        // 已有 story 记录，更新
-        await supabaseAdmin.from('stories').update({ content: story_content }).eq('id', storyId);
+      if (existingStory) {
+        // 已有记录，更新
+        await supabaseAdmin.from('stories').update({ content: finalStory }).eq('id', existingStory.id);
       } else {
         // 新建 story 记录
         const { data: newStory } = await supabaseAdmin.from('stories').insert({
           project_id: id,
-          content: story_content,
+          content: finalStory,
           title: title ?? '未命名故事',
         }).select('id').single();
-        if (newStory?.id) {
-          await supabaseAdmin.from('projects').update({ story_id: newStory.id }).eq('id', id);
-        }
       }
     }
 
-    // 更新 hero_designs 表（upsert）
-    if (hero_design) {
-      const hd = typeof hero_design === 'string' ? JSON.parse(hero_design) : hero_design;
-      const { error: heroErr } = await supabaseAdmin
+    // 更新 hero_designs 表（upsert，兼容 hero_design 或 hero_designs）
+    if (hero_designs !== undefined || hero_design !== undefined) {
+      const hdRaw = hero_designs ?? hero_design;
+      const hd = typeof hdRaw === 'string' ? JSON.parse(hdRaw) : hdRaw;
+      
+      // 先查是否已有记录
+      const { data: existingHero } = await supabaseAdmin
         .from('hero_designs')
-        .upsert({ project_id: id, ...hd }, { onConflict: 'project_id' });
+        .select('id')
+        .eq('project_id', id)
+        .maybeSingle();
 
-      if (heroErr) console.error('⚠️ hero_design 更新失败:', heroErr);
+      if (existingHero) {
+        // 已有记录，更新
+        const { error: heroErr } = await supabaseAdmin
+          .from('hero_designs')
+          .update(hd)
+          .eq('id', existingHero.id);
+        if (heroErr) console.error('⚠️ hero_design 更新失败:', heroErr);
+      } else {
+        // 新建记录
+        const { error: heroErr } = await supabaseAdmin
+          .from('hero_designs')
+          .insert({ project_id: id, ...hd });
+        if (heroErr) console.error('⚠️ hero_design 创建失败:', heroErr);
+      }
     }
 
     // 重新查询完整数据返回
