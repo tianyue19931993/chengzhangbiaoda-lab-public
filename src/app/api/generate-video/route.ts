@@ -1,202 +1,117 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import { generateVideoWithJimeng } from '@/lib/playwright/jimeng-automation';
-import { videoPoller } from '@/lib/playwright/video-poller';
+import { generateVideo } from '@/lib/doubao-api';
+import { downloadImageToBuffer, uploadToSupabaseStorage } from '@/lib/storage-helper';
 
+/**
+ * POST /api/generate-video
+ * 调用豆包 Seedance 2.0 生成 15 秒 16:9 动画视频
+ * 参考：9 张分镜图 + 故事文本 + 风格 Prompt
+ */
 export async function POST(request: NextRequest) {
   try {
-    console.log('🎬 开始生成视频...');
-    
-    const body = await request.json();
-    const { projectId, imageUrls, prompt, style = 'pixar' } = body;
-    
-    if (!projectId) {
-      return NextResponse.json(
-        { success: false, error: '未提供项目 ID' },
-        { status: 400 }
-      );
-    }
-    
+    const { projectId, imageUrls, prompt, style = 'pixar' } = await request.json();
+    if (!projectId) return NextResponse.json({ success: false, error: '缺少 projectId' }, { status: 400 });
     if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
-      return NextResponse.json(
-        { success: false, error: '未提供图片 URL' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: '缺少 imageUrls' }, { status: 400 });
     }
-    
-    if (!prompt) {
-      return NextResponse.json(
-        { success: false, error: '未提供视频提示词' },
-        { status: 400 }
-      );
-    }
-    
-    console.log(`📺 项目 ID: ${projectId}`);
-    console.log(`🎨 图片数量: ${imageUrls.length}`);
-    console.log(`🎨 风格: ${style}`);
-    
-    // 检查项目是否存在
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from('projects')
-      .select('*')
-      .eq('id', projectId)
-      .single();
-    
-    if (projectError || !project) {
-      return NextResponse.json(
-        { success: false, error: '项目不存在' },
-        { status: 404 }
-      );
-    }
-    
-    // 检查视频生成次数
-    const { count: videoCount, error: countError } = await supabaseAdmin
+
+    console.log(`🎬 generate-video 开始 | project=${projectId}`);
+
+    // 检查是否已生成过（重生次数限制）
+    const { count } = await supabaseAdmin
       .from('videos')
-      .select('*', { count: 'exact' })
+      .select('*', { count: 'exact', head: true })
       .eq('project_id', projectId);
-    
-    if (countError) {
-      console.error('❌ 查询视频次数失败:', countError);
-    }
-    
-    const currentCount = videoCount || 0;
-    console.log(`📊 当前视频生成次数: ${currentCount}`);
-    
-    // 第一次免费，后续收费
-    if (currentCount > 0) {
-      console.log('💰 需要付费生成');
-      // TODO: 实现支付逻辑
+
+    if ((count || 0) >= 1) {
+      // TODO: 接入支付，付费后允许重生
       return NextResponse.json(
-        { 
-          success: false, 
-          error: '需要付费',
-          data: {
-            price: 9.9,
-            count: currentCount,
-          }
-        },
+        { success: false, error: '已生成过视频，需要付费才能重新生成', needPayment: true, price: 9.9 },
         { status: 402 }
       );
     }
-    
-    // 更新项目状态
-    console.log('📝 更新项目状态: generating_video');
-    const { error: statusError } = await supabaseAdmin
-      .from('projects')
-      .update({ status: 'generating_video' })
-      .eq('id', projectId);
-    
-    if (statusError) {
-      console.error('❌ 更新状态失败:', statusError);
-      return NextResponse.json(
-        { success: false, error: `更新状态失败: ${statusError.message}` },
-        { status: 500 }
-      );
-    }
-    
+
+    // 更新状态
+    await supabaseAdmin.from('projects').update({ status: 'generating_video' }).eq('id', projectId);
+
     // 创建视频记录
-    console.log('📝 创建视频记录...');
-    const { data: video, error: videoError } = await supabaseAdmin
+    const { data: video, error: vErr } = await supabaseAdmin
       .from('videos')
       .insert({
-        project_id: projectId,
-        prompt: prompt,
-        generation_count: currentCount + 1,
-        status: 'pending',
+        project_id:       projectId,
+        prompt,
+        generation_count: 1,
+        status:           'processing',
+        duration:         15,
+        aspect_ratio:      '16:9',
       })
       .select()
       .single();
-    
-    if (videoError) {
-      console.error('❌ 创建视频记录失败:', videoError);
-      return NextResponse.json(
-        { success: false, error: `创建视频记录失败: ${videoError.message}` },
-        { status: 500 }
-      );
+
+    if (vErr || !video) {
+      console.error('❌ 创建视频记录失败:', vErr);
+      return NextResponse.json({ success: false, error: '创建视频记录失败' }, { status: 500 });
     }
-    
-    console.log(`✅ 视频记录已创建: ${video.id}`);
-    
-    // 调用即梦生成视频（异步）
-    console.log('🤖 调用即梦 AI 生成视频...');
-    
-    // 注意：即梦视频生成是异步的，这里先返回，然后通过轮询获取结果
-    generateVideoWithJimeng(imageUrls, prompt, style)
-      .then(async (result) => {
-        if (result.success && result.videoUrl) {
-          console.log(`✅ 视频生成成功: ${result.videoUrl}`);
-          
-          // 更新视频记录
-          await supabaseAdmin
-            .from('videos')
-            .update({
-              url: result.videoUrl,
-              status: 'completed',
-            })
-            .eq('id', video.id);
-          
-          // 更新项目状态
-          await supabaseAdmin
-            .from('projects')
-            .update({ status: 'completed' })
-            .eq('id', projectId);
-          
-          console.log('✅ 视频生成流程完成');
-        } else {
-          console.error('❌ 视频生成失败:', result.error);
-          
-          // 更新视频记录
-          await supabaseAdmin
-            .from('videos')
-            .update({
-              status: 'failed',
-              error_message: result.error,
-            })
-            .eq('id', video.id);
-          
-          // 更新项目状态
-          await supabaseAdmin
-            .from('projects')
-            .update({ status: 'failed' })
-            .eq('id', projectId);
-        }
-      })
-      .catch(async (error) => {
-        console.error('❌ 视频生成过程出错:', error);
-        
-        // 更新视频记录
-        await supabaseAdmin
-          .from('videos')
-          .update({
-            status: 'failed',
-            error_message: error.message,
-          })
-          .eq('id', video.id);
-        
-        // 更新项目状态
-        await supabaseAdmin
-          .from('projects')
-          .update({ status: 'failed' })
-          .eq('id', projectId);
-      });
-    
-    // 立即返回，不等待视频生成完成
-    console.log('✅ 视频生成任务已启动（异步）');
-    
+
+    console.log(`📺 视频记录创建: ${video.id}`);
+
+    // 异步调用豆包视频生成（不阻塞返回）
+    generateVideoAsync(projectId, video.id, imageUrls, prompt, style);
+
     return NextResponse.json({
       success: true,
-      data: {
-        projectId,
-        videoId: video.id,
-        status: 'pending',
-        message: '视频生成中，请稍后查看',
-      },
+      data: { projectId, videoId: video.id, status: 'processing' },
     });
-  } catch (error: any) {
-    console.error('❌ 生成视频过程出错:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+  } catch (err: any) {
+    console.error('❌ generate-video 异常:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+/**
+ * 异步生成视频，完成后更新数据库
+ */
+async function generateVideoAsync(
+  projectId: string,
+  videoId: string,
+  imageUrls: string[],
+  prompt: string,
+  style: string
+) {
+  try {
+    console.log(`🎬 开始调用豆包视频生成 API...`);
+    const videoUrl = await generateVideo(imageUrls, prompt, style);
+
+    if (!videoUrl) throw new Error('视频生成返回为空');
+
+    // 下载视频上传到 Supabase Storage
+    console.log('📥 下载视频...');
+    const { buffer, contentType } = await downloadImageToBuffer(videoUrl);
+    const fileName = `${projectId}/video_${Date.now()}.mp4`;
+    const finalUrl = await uploadToSupabaseStorage('videos', fileName, buffer, contentType || 'video/mp4');
+
+    // 更新数据库
+    await supabaseAdmin
+      .from('videos')
+      .update({ url: finalUrl, status: 'completed' })
+      .eq('id', videoId);
+
+    await supabaseAdmin
+      .from('projects')
+      .update({ status: 'completed' })
+      .eq('id', projectId);
+
+    console.log(`✅ 视频生成完成: ${finalUrl}`);
+  } catch (err: any) {
+    console.error('❌ 视频生成失败:', err);
+    await supabaseAdmin
+      .from('videos')
+      .update({ status: 'failed', error_message: err.message })
+      .eq('id', videoId);
+    await supabaseAdmin
+      .from('projects')
+      .update({ status: 'failed' })
+      .eq('id', projectId);
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import KidButton from '@/components/KidButton';
 import { formatDateTime } from '@/lib/utils';
@@ -14,6 +14,7 @@ interface Project {
   status: string;
   original_image_url: string;
   created_at: string;
+  child_name?: string;
   images: Image[];
   videos: Video[];
 }
@@ -24,6 +25,7 @@ interface Image {
   prompt: string;
   order_index: number;
   regeneration_count: number;
+  scene_title?: string;
 }
 
 interface Video {
@@ -34,7 +36,6 @@ interface Video {
   status: string;
 }
 
-// 默认故事大纲（豆包API未接入时使用）
 const DEFAULT_STORY = `在一个充满魔法的小镇上，住着一个叫"小星星"的小朋友。小星星最喜欢画画了，每天都会用彩笔画出自己想象中的世界。
 
 有一天，小星星画了一只会飞的猫咪！这只猫咪有着彩虹色的毛发，眼睛像两颗闪闪发光的宝石。当小星星对着画作许愿时，神奇的事情发生了——画中的猫咪竟然活了过来！
@@ -59,22 +60,29 @@ export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
-  
+
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
   // 编辑状态
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState('');
   const [editingStory, setEditingStory] = useState(false);
   const [storyInput, setStoryInput] = useState('');
   const [childName, setChildName] = useState('');
-  
+
+  // 新功能状态
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
+  const [promptInput, setPromptInput] = useState('');
+  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
+  const lightboxRef = useRef<HTMLDivElement>(null);
+
   // 加载项目详情
   useEffect(() => {
     if (projectId) loadProject();
   }, [projectId]);
-  
+
   // 加载用户名字
   useEffect(() => {
     if (project?.user_id) {
@@ -86,7 +94,7 @@ export default function ProjectDetailPage() {
         .catch(() => {});
     }
   }, [project?.user_id]);
-  
+
   const loadProject = async () => {
     setLoading(true);
     try {
@@ -104,18 +112,20 @@ export default function ProjectDetailPage() {
       setLoading(false);
     }
   };
-  
+
   // 解析故事数据
   const getStoryData = () => {
-    if (!project?.story) return { story: DEFAULT_STORY, prompts: DEFAULT_PROMPTS };
+    if (!project?.story) return { story: DEFAULT_STORY, prompts: DEFAULT_PROMPTS, hero_design: null, storyboard: [] };
     try {
       const parsed = JSON.parse(project.story);
       return {
         story: parsed.story || DEFAULT_STORY,
         prompts: parsed.prompts || DEFAULT_PROMPTS,
+        hero_design: parsed.hero_design || null,
+        storyboard: parsed.storyboard || [],
       };
     } catch {
-      return { story: project.story || DEFAULT_STORY, prompts: DEFAULT_PROMPTS };
+      return { story: project.story || DEFAULT_STORY, prompts: DEFAULT_PROMPTS, hero_design: null, storyboard: [] };
     }
   };
 
@@ -146,7 +156,7 @@ export default function ProjectDetailPage() {
   const saveStory = async () => {
     if (!project) return;
     try {
-      const newStoryJson = JSON.stringify({ story: storyInput, prompts: DEFAULT_PROMPTS });
+      const newStoryJson = JSON.stringify({ story: storyInput, prompts: storyData.prompts, hero_design: storyData.hero_design, storyboard: storyData.storyboard });
       const res = await fetch(`/api/projects/${projectId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -164,28 +174,80 @@ export default function ProjectDetailPage() {
     }
   };
 
-  // 单张图片重新生成
+  // 单图下载
+  const handleDownloadImage = async (url: string, index: number) => {
+    setDownloadingIndex(index);
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `分镜${index + 1}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      alert('下载失败');
+    } finally {
+      setDownloadingIndex(null);
+    }
+  };
+
+  // 用自定义 Prompt 重新生成单张图
+  const handleRegenImageWithPrompt = async (imageId: string, orderIndex: number) => {
+    const newPrompt = promptInput.trim();
+    if (!newPrompt) { alert('请输入 Prompt'); return; }
+    try {
+      const res = await fetch('/api/regenerate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project?.id, orderIndex, prompt: newPrompt }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ 重新生成中，请稍后刷新查看');
+        setEditingPromptIndex(null);
+        setPromptInput('');
+        loadProject();
+      } else {
+        alert(`❌ ${data.error || '重新生成失败'}`);
+      }
+    } catch (e) {
+      alert('❌ 重新生成失败');
+    }
+  };
+
+  // 单张图片重新生成（用当前 prompt）
   const handleRegenImage = async (imageId: string, orderIndex: number) => {
     if (!project) return;
     const img = project.images.find(i => i.id === imageId);
-    if (!img || img.regeneration_count >= 1) {
+    if (!img || (img.regeneration_count ?? 0) >= 1) {
       alert('❌ 该图片已达到最大重生次数（1次）');
       return;
     }
-    
-    // TODO: 接入即梦API后实现真正的重新生成
-    alert('🎨 图片重新生成功能待AI服务接入后启用！');
+    setPromptInput(img.prompt || '');
+    setEditingPromptIndex(orderIndex);
   };
 
   // 视频重新生成
   const handleRegenVideo = () => {
     if (!project?.videos?.[0]) return;
-    if (project.videos[0].generation_count >= 1) {
+    if ((project.videos[0].generation_count ?? 0) >= 1) {
       alert('❌ 视频已达到最大重生次数（1次）');
       return;
     }
     alert('🎬 视频重新生成功能待AI服务接入后启用！');
   };
+
+  // 键盘关闭 lightbox
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxIndex(null);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   if (loading) {
     return (
@@ -205,68 +267,68 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-8">
+    <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* 标题 */}
-        <h1 className="text-5xl font-bold text-center text-purple-600 mb-12">
+        <h1 className="text-3xl md:text-5xl font-bold text-center text-purple-600 mb-6 md:mb-12">
           🎬 我的动画作品
         </h1>
 
-        <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12">
+        <div className="bg-white rounded-3xl shadow-2xl p-4 md:p-12">
           {/* ===== 作品标题（可编辑）===== */}
-          <div className="mb-12">
+          <div className="mb-8 md:mb-12">
             {editingTitle ? (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 md:gap-4 flex-wrap">
                 <input
                   type="text"
                   value={titleInput}
                   onChange={(e) => setTitleInput(e.target.value)}
-                  className="text-3xl font-bold text-gray-800 border-3 border-purple-400 rounded-2xl px-6 py-3 flex-1"
+                  className="text-xl md:text-3xl font-bold text-gray-800 border-3 border-purple-400 rounded-2xl px-4 md:px-6 py-2 md:py-3 flex-1 min-w-0"
                   placeholder="给作品起个名字吧"
                   onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
                   autoFocus
                 />
-                <KidButton onClick={saveTitle} className="bg-green-500 text-white px-6 py-3">
+                <KidButton onClick={saveTitle} className="bg-green-500 text-white px-3 md:px-6 py-2 md:py-3 text-sm md:text-base">
                   ✅ 保存
                 </KidButton>
-                <KidButton onClick={() => setEditingTitle(false)} className="bg-gray-400 text-white px-6 py-3">
+                <KidButton onClick={() => setEditingTitle(false)} className="bg-gray-400 text-white px-3 md:px-6 py-2 md:py-3 text-sm md:text-base">
                   取消
                 </KidButton>
               </div>
             ) : (
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 md:gap-4 flex-wrap">
                 <h2
-                  className="text-3xl font-bold text-gray-800 cursor-pointer hover:text-purple-600 transition-colors flex-1"
+                  className="text-2xl md:text-3xl font-bold text-gray-800 cursor-pointer hover:text-purple-600 transition-colors flex-1 min-w-0"
                   onClick={() => { setTitleInput(project.title || ''); setEditingTitle(true); }}
                 >
                   ✏️ {project.title || '未命名作品（点击编辑）'}
                 </h2>
-                <span className="px-4 py-2 bg-purple-200 text-purple-800 rounded-full font-bold">
+                <span className="px-3 md:px-4 py-1 md:py-2 bg-purple-200 text-purple-800 rounded-full font-bold text-sm md:text-base whitespace-nowrap">
                   {getStyleName(project.style)}
                 </span>
               </div>
             )}
             {/* 显示小朋友名字 */}
-            {childName && childName !== '小朋友' && (
-              <p className="text-purple-600 font-bold text-lg mt-2">
-                👧 {childName}
+            {(childName && childName !== '小朋友') || (project as any)?.child_name ? (
+              <p className="text-purple-600 font-bold text-base md:text-lg mt-2">
+                👧 {childName || (project as any).child_name}
               </p>
-            )}
-            <p className="text-gray-500 mt-2">
+            ) : null}
+            <p className="text-gray-500 mt-2 text-sm md:text-base">
               创建于 {formatDateTime(project.created_at)}
             </p>
           </div>
 
           {/* ===== AI 故事大纲（可编辑）===== */}
-          <div className="mb-12">
+          <div className="mb-8 md:mb-12">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-2xl font-bold text-gray-800">
+              <h3 className="text-xl md:text-2xl font-bold text-gray-800">
                 📖 AI 故事大纲
               </h3>
               {!editingStory && (
                 <KidButton
                   onClick={() => { setStoryInput(storyData.story); setEditingStory(true); }}
-                  className="bg-yellow-400 text-white px-4 py-2"
+                  className="bg-yellow-400 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base"
                 >
                   ✏️ 编辑故事
                 </KidButton>
@@ -278,38 +340,57 @@ export default function ProjectDetailPage() {
                 <textarea
                   value={storyInput}
                   onChange={(e) => setStoryInput(e.target.value)}
-                  className="w-full h-64 border-3 border-yellow-400 rounded-2xl p-6 text-lg leading-relaxed resize-none focus:outline-none focus:border-yellow-500"
+                  className="w-full h-48 md:h-64 border-3 border-yellow-400 rounded-2xl p-4 md:p-6 text-base md:text-lg leading-relaxed resize-none focus:outline-none focus:border-yellow-500"
                   placeholder="在这里编写你的故事..."
                   autoFocus
                 />
-                <div className="flex justify-end gap-3 mt-4">
-                  <KidButton onClick={() => setEditingStory(false)} className="bg-gray-400 text-white px-6 py-2">
+                <div className="flex justify-end gap-2 md:gap-3 mt-3 md:mt-4">
+                  <KidButton onClick={() => setEditingStory(false)} className="bg-gray-400 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base">
                     取消
                   </KidButton>
-                  <KidButton onClick={saveStory} className="bg-green-500 text-white px-6 py-2">
+                  <KidButton onClick={saveStory} className="bg-green-500 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base">
                     ✅ 保存故事
                   </KidButton>
                 </div>
               </div>
             ) : (
-              <div className="bg-yellow-50 rounded-2xl p-6 text-lg leading-relaxed whitespace-pre-wrap">
+              <div className="bg-yellow-50 rounded-2xl p-4 md:p-6 text-base md:text-lg leading-relaxed whitespace-pre-wrap">
                 {storyData.story}
               </div>
             )}
           </div>
 
+          {/* ===== 角色设定（显示 hero_design）===== */}
+          {storyData.hero_design && (
+            <div className="mb-8 md:mb-12 bg-purple-50 rounded-2xl p-4 md:p-6">
+              <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-3 md:mb-4">
+                🎭 角色设定
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 text-sm md:text-base">
+                <div><span className="font-bold">名字：</span>{storyData.hero_design.name}</div>
+                <div><span className="font-bold">物种：</span>{storyData.hero_design.species}</div>
+                <div><span className="font-bold">颜色：</span>{storyData.hero_design.fur_color}</div>
+                <div><span className="font-bold">服装：</span>{storyData.hero_design.clothes}</div>
+                {storyData.hero_design.item && (
+                  <div className="col-span-2 md:col-span-4"><span className="font-bold">道具：</span>{storyData.hero_design.item}</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ===== 九宫格分镜图（16:9）===== */}
-          <div className="mb-12">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">
+          <div className="mb-8 md:mb-12">
+            <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-4 md:mb-6">
               🎨 九宫格分镜
             </h3>
-            
-            <div className="grid grid-cols-3 gap-4">
+
+            <div className="grid grid-cols-3 gap-2 md:gap-4">
               {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => {
                 const image = project.images?.find(img => img.order_index === index);
                 const hasImage = image && image.url;
                 const prompt = storyData.prompts[index] || `分镜 ${index + 1}`;
-                
+                const sceneTitle = image?.scene_title || storyData.storyboard?.[index]?.title || `分镜 ${index + 1}`;
+
                 return (
                   <div key={index} className="relative group">
                     {/* 图片或空位 - 16:9 比例 */}
@@ -317,38 +398,59 @@ export default function ProjectDetailPage() {
                       <>
                         <img
                           src={image.url}
-                          alt={`分镜 ${index + 1}`}
-                          className="w-full aspect-video rounded-2xl shadow-lg object-cover"
+                          alt={sceneTitle}
+                          className="w-full aspect-video rounded-2xl shadow-lg object-cover cursor-pointer hover:scale-[1.02] transition-transform"
+                          onClick={() => setLightboxIndex(index)}
                         />
-                        {/* 重生按钮 */}
-                        {(image.regeneration_count ?? 0) < 1 && (
+                        {/* 悬浮操作按钮 */}
+                        <div className="absolute top-1 right-1 md:top-2 md:right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={() => handleRegenImage(image.id, index)}
-                            className="absolute top-2 right-2 bg-orange-400 text-white rounded-full w-10 h-10 flex items-center justify-center text-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                            onClick={(e) => { e.stopPropagation(); handleRegenImage(image.id, index); }}
+                            className="bg-orange-400 text-white rounded-full w-7 h-7 md:w-10 md:h-10 flex items-center justify-center text-sm md:text-lg shadow-lg"
                             title="重新生成这张图"
                           >
                             🔄
                           </button>
-                        )}
+                        </div>
                       </>
                     ) : (
-                      /* 空位占符 - 16:9 */
+                      /* 空位占位 - 16:9 */
                       <div className="w-full aspect-video rounded-2xl bg-gray-100 border-3 border-dashed border-gray-300 flex flex-col items-center justify-center">
-                        <div className="text-4xl mb-1 opacity-30">🖼️</div>
-                        <span className="text-sm text-gray-400">分镜 {index + 1}</span>
+                        <div className="text-2xl md:text-4xl mb-1 opacity-30">🖼️</div>
+                        <span className="text-xs md:text-sm text-gray-400">分镜 {index + 1}</span>
                       </div>
                     )}
 
-                    {/* 提示词显示 */}
-                    <div className="mt-2 px-1">
-                      <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed" title={prompt}>
+                    {/* 场景标题 + 提示词 + 操作 */}
+                    <div className="mt-1 md:mt-2 px-1">
+                      <p className="text-xs font-bold text-gray-700 truncate">{sceneTitle}</p>
+                      <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mt-0.5" title={prompt}>
                         📝 {prompt}
                       </p>
-                      <div className="text-xs text-gray-400 mt-0.5">
-                        {hasImage ? (
-                          <span>✅ 已生成 · 剩余重生：{1 - (image.regeneration_count ?? 0)}</span>
-                        ) : (
-                          <span>⏳ 待生成</span>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs text-gray-400">
+                          {hasImage ? (
+                            `✅ 重生剩 ${1 - (image.regeneration_count ?? 0)}`
+                          ) : (
+                            <span className="text-yellow-500">⏳ 待生成</span>
+                          )}
+                        </span>
+                        {hasImage && (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleDownloadImage(image.url, index)}
+                              className="text-xs bg-blue-100 text-blue-600 rounded px-1.5 py-0.5 hover:bg-blue-200 whitespace-nowrap"
+                              disabled={downloadingIndex === index}
+                            >
+                              {downloadingIndex === index ? '⏳' : '⬇️ 下载'}
+                            </button>
+                            <button
+                              onClick={() => { setPromptInput(prompt); setEditingPromptIndex(index); }}
+                              className="text-xs bg-purple-100 text-purple-600 rounded px-1.5 py-0.5 hover:bg-purple-200 whitespace-nowrap"
+                            >
+                              ✏️ Prompt
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -359,8 +461,8 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* ===== 动画视频 ===== */}
-          <div className="mb-12">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">
+          <div className="mb-8 md:mb-12">
+            <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-4 md:mb-6">
               🎬 动画视频
             </h3>
 
@@ -371,44 +473,122 @@ export default function ProjectDetailPage() {
                   controls
                   className="w-full rounded-2xl shadow-lg"
                 />
-                <div className="mt-4 flex items-center justify-between">
+                <div className="mt-3 md:mt-4 flex items-center justify-between">
                   <span className="text-gray-600 text-sm">
-                    已生成 · 剩余重生机会：{1 - project.videos[0].generation_count}
+                    已生成 · 剩余重生机会：{1 - (project.videos[0].generation_count ?? 0)}
                   </span>
                   {(project.videos[0].generation_count ?? 0) < 1 && (
-                    <KidButton onClick={handleRegenVideo} className="bg-orange-400 text-white px-4 py-2">
+                    <KidButton onClick={handleRegenVideo} className="bg-orange-400 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base">
                       🔄 重新生成视频
                     </KidButton>
                   )}
                 </div>
               </div>
             ) : (
-              /* 空位占符 */
+              /* 空位占位 */
               <div className="w-full aspect-video rounded-2xl bg-gray-100 border-3 border-dashed border-gray-300 flex flex-col items-center justify-center">
-                <div className="text-7xl mb-3 opacity-30">🎬</div>
-                <span className="text-xl text-gray-400">动画视频位置</span>
-                <span className="text-sm text-gray-300 mt-2">等待 AI 生成</span>
+                <div className="text-4xl md:text-7xl mb-2 md:mb-3 opacity-30">🎬</div>
+                <span className="text-base md:text-xl text-gray-400">动画视频位置</span>
+                <span className="text-xs md:text-sm text-gray-300 mt-1 md:mt-2">等待 AI 生成</span>
               </div>
             )}
           </div>
 
           {/* ===== 操作按钮 ===== */}
-          <div className="flex justify-center space-x-6">
+          <div className="flex justify-center space-x-4 md:space-x-6">
             <KidButton
               onClick={() => router.push('/upload')}
-              className="bg-gradient-to-r from-green-400 to-blue-400 text-white px-8 py-4 text-xl"
+              className="bg-gradient-to-r from-green-400 to-blue-400 text-white px-4 md:px-8 py-2 md:py-4 text-base md:text-xl"
             >
               🎨 创作新作品
             </KidButton>
             <KidButton
               onClick={() => router.push('/my-works')}
-              className="bg-gray-400 text-white px-8 py-4 text-xl"
+              className="bg-gray-400 text-white px-4 md:px-8 py-2 md:py-4 text-base md:text-xl"
             >
               📺 返回作品列表
             </KidButton>
           </div>
         </div>
       </div>
+
+      {/* ===== Lightbox 放大查看 ===== */}
+      {lightboxIndex !== null && project?.images?.[lightboxIndex] && (
+        <div
+          ref={lightboxRef}
+          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-2 md:p-8 cursor-pointer"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <img
+            src={project.images[lightboxIndex].url}
+            alt={`分镜 ${lightboxIndex + 1}`}
+            className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          {/* 关闭按钮 */}
+          <button
+            onClick={() => setLightboxIndex(null)}
+            className="fixed top-4 right-4 md:top-6 md:right-6 text-white text-3xl md:text-4xl z-50 hover:scale-110 transition-transform"
+          >
+            ✕
+          </button>
+          {/* 底部信息 */}
+          <div className="fixed bottom-2 md:bottom-6 left-0 right-0 text-white text-center px-2 md:px-4 z-50">
+            <p className="text-sm md:text-base font-bold">分镜 {lightboxIndex + 1}：{project.images[lightboxIndex].scene_title || ''}</p>
+            <p className="text-xs md:text-sm text-gray-300 mt-1 max-w-2xl mx-auto line-clamp-2">{project.images[lightboxIndex].prompt}</p>
+          </div>
+          {/* 左右切换 */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setLightboxIndex(Math.max(0, lightboxIndex - 1)); }}
+            className="fixed left-2 md:left-6 top-1/2 -translate-y-1/2 text-white text-3xl md:text-5xl z-50 hover:scale-110 transition-transform"
+            disabled={lightboxIndex === 0}
+          >
+            ‹
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setLightboxIndex(Math.min((project?.images?.length || 1) - 1, lightboxIndex + 1)); }}
+            className="fixed right-2 md:right-6 top-1/2 -translate-y-1/2 text-white text-3xl md:text-5xl z-50 hover:scale-110 transition-transform"
+            disabled={lightboxIndex === (project?.images?.length || 1) - 1}
+          >
+            ›
+          </button>
+        </div>
+      )}
+
+      {/* ===== Prompt 编辑弹窗 ===== */}
+      {editingPromptIndex !== null && (
+        <div
+          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={(e) => e.target === e.currentTarget && setEditingPromptIndex(null)}
+        >
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="text-xl md:text-2xl font-bold mb-4">
+              ✏️ 编辑分镜 {editingPromptIndex + 1} 的 Prompt
+            </h3>
+            <textarea
+              value={promptInput}
+              onChange={e => setPromptInput(e.target.value)}
+              className="w-full h-32 md:h-40 border-2 border-purple-300 rounded-2xl p-3 md:p-4 text-sm md:text-base focus:outline-none focus:border-purple-500 resize-none"
+              placeholder="修改 Prompt 后重新生成这张图..."
+              autoFocus
+            />
+            <div className="flex justify-end gap-2 md:gap-3 mt-3 md:mt-4">
+              <KidButton onClick={() => setEditingPromptIndex(null)} className="bg-gray-400 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base">
+                取消
+              </KidButton>
+              <KidButton
+                onClick={() => {
+                  const img = project?.images?.find((_, i) => i === editingPromptIndex);
+                  if (img) handleRegenImageWithPrompt(img.id, editingPromptIndex);
+                }}
+                className="bg-purple-500 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base"
+              >
+                🔄 重新生成
+              </KidButton>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
