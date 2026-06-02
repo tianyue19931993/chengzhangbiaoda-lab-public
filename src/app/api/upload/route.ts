@@ -28,6 +28,18 @@ export async function POST(request: NextRequest) {
     console.log(`📏 文件大小: ${(file.size / 1024).toFixed(2)} KB`);
     console.log(`📂 文件类型: ${file.type}`);
     
+    // 确保用户存在（自动创建）
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .single();
+    
+    if (!existingUser) {
+      await supabaseAdmin.from('users').insert({ id: userId });
+      console.log(`👤 自动创建用户: ${userId}`);
+    }
+    
     // 验证文件类型
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
     if (!allowedTypes.includes(file.type)) {
