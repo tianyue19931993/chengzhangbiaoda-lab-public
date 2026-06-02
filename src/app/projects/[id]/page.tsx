@@ -189,7 +189,7 @@ export default function ProjectDetailPage() {
     );
   }
   
-  const storyData = JSON.parse(project.story || '{}');
+  const storyData = project.story ? JSON.parse(project.story) : { story: '', prompts: [] };
   
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-8">

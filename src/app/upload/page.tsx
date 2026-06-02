@@ -83,32 +83,15 @@ export default function UploadPage() {
         throw new Error(uploadData.error || '上传失败');
       }
       
-      const { projectId, imageUrl } = uploadData.data;
-      setUploadProgress('🤖 AI 正在理解你的创意...');
+      const { projectId } = uploadData.data;
+      setUploadProgress('✅ 上传成功！');
       
-      // 调用豆包生成故事
-      const storyRes = await fetch('/api/generate-story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          imageUrl,
-          style: selectedStyle,
-        }),
-      });
-      
-      const storyData = await storyRes.json();
-      
-      if (!storyData.success) {
-        throw new Error(storyData.error || '故事生成失败');
-      }
-      
-      setUploadProgress('✅ 故事生成完成！');
+      // TODO: AI生成功能待接入豆包API后启用
       
       // 跳转到项目详情页
       setTimeout(() => {
         router.push(`/projects/${projectId}`);
-      }, 1000);
+      }, 500);
     } catch (error: any) {
       console.error('上传失败:', error);
       alert(`❌ 上传失败: ${error.message}`);
