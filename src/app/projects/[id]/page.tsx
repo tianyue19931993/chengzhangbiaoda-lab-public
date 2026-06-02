@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import KidButton from '@/components/KidButton';
 
 interface Project {
@@ -33,6 +32,27 @@ interface Video {
   status: string;
 }
 
+// 默认故事大纲（豆包API未接入时使用）
+const DEFAULT_STORY = `在一个充满魔法的小镇上，住着一个叫"小星星"的小朋友。小星星最喜欢画画了，每天都会用彩笔画出自己想象中的世界。
+
+有一天，小星星画了一只会飞的猫咪！这只猫咪有着彩虹色的毛发，眼睛像两颗闪闪发光的宝石。当小星星对着画作许愿时，神奇的事情发生了——画中的猫咪竟然活了过来！
+
+彩虹猫带着小星星飞上了天空，他们一起穿过了云朵城堡，拜访了月亮婆婆，还在星河里游了个泳。最后，彩虹猫告诉小星星："只要你保持想象力，我永远都会陪着你。"
+
+从此以后，小星星的每一幅画都充满了魔法，而彩虹猫也成了小星星最好的朋友。`;
+
+const DEFAULT_PROMPTS = [
+  "一个可爱的小朋友坐在书桌前画画，房间温馨明亮，窗外阳光洒进来，Pixar 3D动画风格",
+  "小朋友画了一只彩虹色的猫咪，猫咪从画纸上缓缓浮现，眼睛发光，魔法粒子环绕，Pixar风格",
+  "彩虹猫完全从画中跳出来，小朋友惊讶又开心，房间被彩色光芒照亮，Pixar 3D风格",
+  "彩虹猫载着小朋友飞出窗户，穿过云朵，背景是蓝天和彩虹，梦幻场景，Pixar风格",
+  "云朵城堡出现在眼前，由柔软的白云构成，有门窗和塔楼，彩虹猫和小星星飞向城堡，Pixar风格",
+  "在云朵城堡内部，到处是棉花糖做的家具，月亮婆婆慈祥地笑着迎接他们，温暖氛围，Pixar风格",
+  "星河场景，璀璨的星星形成一条发光的河流，彩虹猫和小星星在星河中游泳，唯美梦幻，Pixar风格",
+  "回到地面，小朋友躺在床上熟睡，彩虹猫趴在枕边守护，月光洒进房间，温馨宁静，Pixar风格",
+  "小朋友醒来发现桌上多了一张画：自己和彩虹猫的合影，阳光洒进来，幸福微笑，Pixar 3D结局",
+];
+
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -40,27 +60,26 @@ export default function ProjectDetailPage() {
   
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generatingImages, setGeneratingImages] = useState(false);
-  const [generatingVideo, setGeneratingVideo] = useState(false);
+  
+  // 编辑状态
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState('');
+  const [editingStory, setEditingStory] = useState(false);
+  const [storyInput, setStoryInput] = useState('');
   
   // 加载项目详情
   useEffect(() => {
-    if (projectId) {
-      loadProject();
-    }
+    if (projectId) loadProject();
   }, [projectId]);
   
   const loadProject = async () => {
     setLoading(true);
-    
     try {
       const res = await fetch(`/api/projects/${projectId}`);
       const data = await res.json();
-      
       if (data.success) {
         setProject(data.data.project);
       } else {
-        console.error('加载项目失败:', data.error);
         alert('❌ 项目不存在');
         router.push('/my-works');
       }
@@ -71,107 +90,88 @@ export default function ProjectDetailPage() {
     }
   };
   
-  // 生成九宫格
-  const handleGenerateImages = async () => {
-    if (!project) return;
-    
-    setGeneratingImages(true);
-    
+  // 解析故事数据
+  const getStoryData = () => {
+    if (!project?.story) return { story: DEFAULT_STORY, prompts: DEFAULT_PROMPTS };
     try {
-      // 解析 story 中的 prompts
-      const storyData = JSON.parse(project.story);
-      const prompts = storyData.prompts || [];
-      
-      if (prompts.length === 0) {
-        alert('❌ 未找到提示词');
-        return;
-      }
-      
-      const res = await fetch('/api/generate-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: project.id,
-          prompts,
-          style: project.style,
-        }),
-      });
-      
-      const data = await res.json();
-      
-      if (data.success) {
-        alert('✅ 九宫格生成中，请稍后刷新查看！');
-        setTimeout(() => loadProject(), 3000);
-      } else {
-        alert(`❌ 生成失败: ${data.error}`);
-      }
-    } catch (error: any) {
-      console.error('生成图片出错:', error);
-      alert(`❌ 生成失败: ${error.message}`);
-    } finally {
-      setGeneratingImages(false);
+      const parsed = JSON.parse(project.story);
+      return {
+        story: parsed.story || DEFAULT_STORY,
+        prompts: parsed.prompts || DEFAULT_PROMPTS,
+      };
+    } catch {
+      return { story: project.story || DEFAULT_STORY, prompts: DEFAULT_PROMPTS };
     }
   };
-  
-  // 生成视频
-  const handleGenerateVideo = async () => {
-    if (!project || !project.images || project.images.length === 0) {
-      alert('❌ 请先生成九宫格图片！');
+
+  const storyData = getStoryData();
+
+  // 保存标题
+  const saveTitle = async () => {
+    if (!project) return;
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: titleInput }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProject({ ...project, title: titleInput });
+        setEditingTitle(false);
+      } else {
+        alert(`❌ 保存失败: ${data.error}`);
+      }
+    } catch (error) {
+      alert('❌ 保存失败');
+    }
+  };
+
+  // 保存故事
+  const saveStory = async () => {
+    if (!project) return;
+    try {
+      const newStoryJson = JSON.stringify({ story: storyInput, prompts: DEFAULT_PROMPTS });
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ story: newStoryJson }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProject({ ...project, story: newStoryJson });
+        setEditingStory(false);
+      } else {
+        alert(`❌ 保存失败: ${data.error}`);
+      }
+    } catch (error) {
+      alert('❌ 保存失败');
+    }
+  };
+
+  // 单张图片重新生成
+  const handleRegenImage = async (imageId: string, orderIndex: number) => {
+    if (!project) return;
+    const img = project.images.find(i => i.id === imageId);
+    if (!img || img.regeneration_count >= 1) {
+      alert('❌ 该图片已达到最大重生次数（1次）');
       return;
     }
     
-    setGeneratingVideo(true);
-    
-    try {
-      const imageUrls = project.images.map(img => img.url);
-      const storyData = JSON.parse(project.story);
-      
-      const res = await fetch('/api/generate-video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: project.id,
-          imageUrls,
-          prompt: storyData.story || 'A cute story',
-          style: project.style,
-        }),
-      });
-      
-      const data = await res.json();
-      
-      if (data.success) {
-        alert('✅ 视频生成中，请稍后刷新查看！');
-        setTimeout(() => loadProject(), 5000);
-      } else if (data.error === '需要付费') {
-        const confirm = window.confirm(
-          `生成视频需要付费 ¥${data.data.price}，是否继续？`
-        );
-        if (confirm) {
-          // TODO: 实现支付逻辑
-          alert('💰 支付功能开发中...');
-        }
-      } else {
-        alert(`❌ 生成失败: ${data.error}`);
-      }
-    } catch (error: any) {
-      console.error('生成视频出错:', error);
-      alert(`❌ 生成失败: ${error.message}`);
-    } finally {
-      setGeneratingVideo(false);
+    // TODO: 接入即梦API后实现真正的重新生成
+    alert('🎨 图片重新生成功能待AI服务接入后启用！');
+  };
+
+  // 视频重新生成
+  const handleRegenVideo = () => {
+    if (!project?.videos?.[0]) return;
+    if (project.videos[0].generation_count >= 1) {
+      alert('❌ 视频已达到最大重生次数（1次）');
+      return;
     }
+    alert('🎬 视频重新生成功能待AI服务接入后启用！');
   };
-  
-  // 下载文件
-  const handleDownload = (url: string, filename: string) => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-  
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
@@ -180,7 +180,7 @@ export default function ProjectDetailPage() {
       </div>
     );
   }
-  
+
   if (!project) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
@@ -188,9 +188,7 @@ export default function ProjectDetailPage() {
       </div>
     );
   }
-  
-  const storyData = project.story ? JSON.parse(project.story) : { story: '', prompts: [] };
-  
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-8">
       <div className="max-w-6xl mx-auto">
@@ -198,111 +196,149 @@ export default function ProjectDetailPage() {
         <h1 className="text-5xl font-bold text-center text-purple-600 mb-12">
           🎬 我的动画作品
         </h1>
-        
+
         <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12">
-          {/* 项目信息 */}
+          {/* ===== 作品标题（可编辑）===== */}
           <div className="mb-12">
-            <h2 className="text-3xl font-bold text-gray-800 mb-4">
-              {project.title || '未命名作品'}
-            </h2>
-            <div className="flex items-center space-x-4">
-              <span className="px-4 py-2 bg-purple-200 text-purple-800 rounded-full font-bold">
-                {getStyleName(project.style)}
-              </span>
-              <span className="text-gray-500">
-                创建于 {new Date(project.created_at).toLocaleDateString('zh-CN')}
-              </span>
-            </div>
-          </div>
-          
-          {/* 原始图片 */}
-          {project.original_image_url && (
-            <div className="mb-12">
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">
-                📸 我的创意画
-              </h3>
-              <img
-                src={project.original_image_url}
-                alt="创意画"
-                className="max-w-full max-h-96 rounded-2xl shadow-lg"
-              />
-            </div>
-          )}
-          
-          {/* AI 生成的故事 */}
-          {storyData.story && (
-            <div className="mb-12">
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">
-                📖 AI 生成的故事
-              </h3>
-              <div className="bg-yellow-50 rounded-2xl p-6 text-lg leading-relaxed">
-                {storyData.story}
-              </div>
-            </div>
-          )}
-          
-          {/* 九宫格图片 */}
-          <div className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-gray-800">
-                🎨 九宫格分镜
-              </h3>
-              <KidButton
-                onClick={handleGenerateImages}
-                disabled={generatingImages || !storyData.prompts}
-                className="bg-gradient-to-r from-green-400 to-blue-400 text-white"
-              >
-                {generatingImages ? '⏳ 生成中...' : '🎨 生成九宫格'}
-              </KidButton>
-            </div>
-            
-            {project.images && project.images.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {project.images.map((image, index) => (
-                  <div key={image.id} className="relative group">
-                    <img
-                      src={image.url}
-                      alt={`分镜 ${index + 1}`}
-                      className="w-full rounded-2xl shadow-lg"
-                    />
-                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => handleDownload(image.url, `image-${index + 1}.png`)}
-                        className="bg-white rounded-full p-2 shadow-lg"
-                      >
-                        📥
-                      </button>
-                    </div>
-                    <div className="mt-2 text-sm text-gray-600">
-                      重生次数: {image.regeneration_count}/1（免费）
-                    </div>
-                  </div>
-                ))}
+            {editingTitle ? (
+              <div className="flex items-center gap-4">
+                <input
+                  type="text"
+                  value={titleInput}
+                  onChange={(e) => setTitleInput(e.target.value)}
+                  className="text-3xl font-bold text-gray-800 border-3 border-purple-400 rounded-2xl px-6 py-3 flex-1"
+                  placeholder="给作品起个名字吧"
+                  onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
+                  autoFocus
+                />
+                <KidButton onClick={saveTitle} className="bg-green-500 text-white px-6 py-3">
+                  ✅ 保存
+                </KidButton>
+                <KidButton onClick={() => setEditingTitle(false)} className="bg-gray-400 text-white px-6 py-3">
+                  取消
+                </KidButton>
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-400">
-                <div className="text-6xl mb-4">🎨</div>
-                <p>点击"生成九宫格"按钮，让 AI 帮你生成分镜图！</p>
+              <div className="flex items-center gap-4">
+                <h2
+                  className="text-3xl font-bold text-gray-800 cursor-pointer hover:text-purple-600 transition-colors flex-1"
+                  onClick={() => { setTitleInput(project.title || ''); setEditingTitle(true); }}
+                >
+                  ✏️ {project.title || '未命名作品（点击编辑）'}
+                </h2>
+                <span className="px-4 py-2 bg-purple-200 text-purple-800 rounded-full font-bold">
+                  {getStyleName(project.style)}
+                </span>
+              </div>
+            )}
+            <p className="text-gray-500 mt-2">
+              创建于 {new Date(project.created_at).toLocaleDateString('zh-CN')}
+            </p>
+          </div>
+
+          {/* ===== AI 故事大纲（可编辑）===== */}
+          <div className="mb-12">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-2xl font-bold text-gray-800">
+                📖 AI 故事大纲
+              </h3>
+              {!editingStory && (
+                <KidButton
+                  onClick={() => { setStoryInput(storyData.story); setEditingStory(true); }}
+                  className="bg-yellow-400 text-white px-4 py-2"
+                >
+                  ✏️ 编辑故事
+                </KidButton>
+              )}
+            </div>
+
+            {editingStory ? (
+              <div>
+                <textarea
+                  value={storyInput}
+                  onChange={(e) => setStoryInput(e.target.value)}
+                  className="w-full h-64 border-3 border-yellow-400 rounded-2xl p-6 text-lg leading-relaxed resize-none focus:outline-none focus:border-yellow-500"
+                  placeholder="在这里编写你的故事..."
+                  autoFocus
+                />
+                <div className="flex justify-end gap-3 mt-4">
+                  <KidButton onClick={() => setEditingStory(false)} className="bg-gray-400 text-white px-6 py-2">
+                    取消
+                  </KidButton>
+                  <KidButton onClick={saveStory} className="bg-green-500 text-white px-6 py-2">
+                    ✅ 保存故事
+                  </KidButton>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-yellow-50 rounded-2xl p-6 text-lg leading-relaxed whitespace-pre-wrap">
+                {storyData.story}
               </div>
             )}
           </div>
-          
-          {/* 视频 */}
+
+          {/* ===== 九宫格分镜图 ===== */}
           <div className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-gray-800">
-                🎬 动画视频
-              </h3>
-              <KidButton
-                onClick={handleGenerateVideo}
-                disabled={generatingVideo || !project.images || project.images.length === 0}
-                className="bg-gradient-to-r from-red-400 to-pink-400 text-white"
-              >
-                {generatingVideo ? '⏳ 生成中...' : '🎬 生成视频'}
-              </KidButton>
-            </div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-6">
+              🎨 九宫格分镜
+            </h3>
             
-            {project.videos && project.videos.length > 0 && project.videos[0].url ? (
+            <div className="grid grid-cols-3 gap-4">
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => {
+                const image = project.images?.find(img => img.order_index === index);
+                const hasImage = image && image.url;
+                
+                return (
+                  <div key={index} className="relative group">
+                    {/* 图片或空位 */}
+                    {hasImage ? (
+                      <>
+                        <img
+                          src={image.url}
+                          alt={`分镜 ${index + 1}`}
+                          className="w-full aspect-square rounded-2xl shadow-lg object-cover"
+                        />
+                        {/* 重生按钮 */}
+                        {(image.regeneration_count ?? 0) < 1 && (
+                          <button
+                            onClick={() => handleRegenImage(image.id, index)}
+                            className="absolute top-2 right-2 bg-orange-400 text-white rounded-full w-10 h-10 flex items-center justify-center text-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                            title="重新生成这张图"
+                          >
+                            🔄
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      /* 空位占符 */
+                      <div className="w-full aspect-square rounded-2xl bg-gray-100 border-3 border-dashed border-gray-300 flex flex-col items-center justify-center">
+                        <div className="text-5xl mb-2 opacity-30">🖼️</div>
+                        <span className="text-sm text-gray-400">分镜 {index + 1}</span>
+                        <span className="text-xs text-gray-300 mt-1">待生成</span>
+                      </div>
+                    )}
+
+                    {/* 底部状态栏 */}
+                    <div className="mt-2 text-center text-xs text-gray-500">
+                      {hasImage ? (
+                        <span>已生成 · 剩余重生机会：{1 - (image.regeneration_count ?? 0)}</span>
+                      ) : (
+                        <span>等待 AI 生成</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ===== 动画视频 ===== */}
+          <div className="mb-12">
+            <h3 className="text-2xl font-bold text-gray-800 mb-6">
+              🎬 动画视频
+            </h3>
+
+            {project.videos?.length > 0 && project.videos[0].url ? (
               <div className="relative">
                 <video
                   src={project.videos[0].url}
@@ -310,37 +346,37 @@ export default function ProjectDetailPage() {
                   className="w-full rounded-2xl shadow-lg"
                 />
                 <div className="mt-4 flex items-center justify-between">
-                  <span className="text-gray-600">
-                    生成次数: {project.videos[0].generation_count}/3
+                  <span className="text-gray-600 text-sm">
+                    已生成 · 剩余重生机会：{1 - project.videos[0].generation_count}
                   </span>
-                  <button
-                    onClick={() => handleDownload(project.videos[0].url, 'video.mp4')}
-                    className="bg-blue-500 text-white px-6 py-2 rounded-full font-bold hover:bg-blue-600"
-                  >
-                    📥 下载视频
-                  </button>
+                  {(project.videos[0].generation_count ?? 0) < 1 && (
+                    <KidButton onClick={handleRegenVideo} className="bg-orange-400 text-white px-4 py-2">
+                      🔄 重新生成视频
+                    </KidButton>
+                  )}
                 </div>
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-400">
-                <div className="text-6xl mb-4">🎬</div>
-                <p>先生成九宫格，然后点击"生成视频"按钮！</p>
+              /* 空位占符 */
+              <div className="w-full aspect-video rounded-2xl bg-gray-100 border-3 border-dashed border-gray-300 flex flex-col items-center justify-center">
+                <div className="text-7xl mb-3 opacity-30">🎬</div>
+                <span className="text-xl text-gray-400">动画视频位置</span>
+                <span className="text-sm text-gray-300 mt-2">等待 AI 生成</span>
               </div>
             )}
           </div>
-          
-          {/* 操作按钮 */}
+
+          {/* ===== 操作按钮 ===== */}
           <div className="flex justify-center space-x-6">
             <KidButton
               onClick={() => router.push('/upload')}
-              className="bg-gradient-to-r from-green-400 to-blue-400 text-white"
+              className="bg-gradient-to-r from-green-400 to-blue-400 text-white px-8 py-4 text-xl"
             >
               🎨 创作新作品
             </KidButton>
-            
             <KidButton
               onClick={() => router.push('/my-works')}
-              className="bg-gray-400 text-white"
+              className="bg-gray-400 text-white px-8 py-4 text-xl"
             >
               📺 返回作品列表
             </KidButton>
@@ -351,7 +387,6 @@ export default function ProjectDetailPage() {
   );
 }
 
-// 获取风格名称
 function getStyleName(style: string): string {
   const styleMap: Record<string, string> = {
     pixar: '🎬 Pixar 3D',
@@ -360,6 +395,5 @@ function getStyleName(style: string): string {
     watercolor: '🎨 水彩',
     cyberpunk: '🌃 赛博朋克',
   };
-  
   return styleMap[style] || style;
 }
