@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       .single();
     
     if (!existingUser) {
-      await supabaseAdmin.from('users').insert({ id: userId });
+      await supabaseAdmin.from('users').insert({ id: userId, name: '小朋友' });
       console.log(`👤 自动创建用户: ${userId}`);
     }
     
