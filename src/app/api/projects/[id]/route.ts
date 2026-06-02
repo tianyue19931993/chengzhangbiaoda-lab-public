@@ -22,20 +22,42 @@ export async function GET(
     console.log('🔍 [DEBUG] listErr:', JSON.stringify(listErr));
     console.log('🔍 [DEBUG] 查询的 id:', id);
 
-    // 查询项目（带关联子表）
-    const { data: project, error } = await supabaseAdmin
+    // 先单独查项目主表（确保一定能拿到）
+    const { data: projectRow, error: projErr } = await supabaseAdmin
       .from('projects')
-      .select(`
-        *,
-        hero_designs(*),
-        storyboard_items(* order by sort_order),
-        videos(*)
-      `)
+      .select('*')
       .eq('id', id)
       .single();
 
-    console.log('🔍 [DEBUG] project:', JSON.stringify(project));
-    console.log('🔍 [DEBUG] error:', JSON.stringify(error));
+    console.log('🔍 [DEBUG] projectRow:', JSON.stringify(projectRow));
+    console.log('🔍 [DEBUG] projErr:', JSON.stringify(projErr));
+
+    if (projErr || !projectRow) {
+      return NextResponse.json({ 
+        success: false, 
+        error: `项目不存在 | debug: ${projErr?.message}` 
+      }, { status: 404 });
+    }
+
+    // 并行查询关联子表（容错：子表没数据不阻塞）
+    const [heroRes, storyRes, videoRes] = await Promise.all([
+      supabaseAdmin.from('hero_designs').select('*').eq('project_id', id).maybeSingle(),
+      supabaseAdmin.from('storyboard_items').select('*').eq('project_id', id).order('sort_order', { ascending: true }),
+      supabaseAdmin.from('videos').select('*').eq('project_id', id).maybeSingle(),
+    ]);
+
+    const project = {
+      ...projectRow,
+      hero_designs: heroRes.data ?? null,
+      storyboard_items: storyRes.data ?? [],
+      videos: videoRes.data ?? null,
+    };
+
+    console.log('🔍 [DEBUG] projectRow:', JSON.stringify(projectRow));
+    console.log('🔍 [DEBUG] projErr:', JSON.stringify(projErr));
+    console.log('🔍 [DEBUG] hero_designs:', JSON.stringify(heroRes.data));
+    console.log('🔍 [DEBUG] storyboard_items count:', storyRes.data?.length);
+    console.log('🔍 [DEBUG] videos:', JSON.stringify(videoRes.data));
 
     if (error || !project) {
       return NextResponse.json({ 
