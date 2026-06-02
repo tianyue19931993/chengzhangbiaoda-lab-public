@@ -11,7 +11,7 @@ export async function GET(
     const projectId = params.id;
     console.log(`📺 获取项目详情: ${projectId}`);
     
-    const { data: project, error } = await supabase
+    const { data: project, error } = await supabaseAdmin
       .from('projects')
       .select(`
         *,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 // 获取项目列表
 export async function GET(request: NextRequest) {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     console.log(`📊 限制: ${limit}, 偏移: ${offset}`);
     
     // 构建查询
-    let query = supabase
+    let query = supabaseAdmin
       .from('projects')
       .select(`
         *,
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     console.log(`📺 标题: ${title || '(未命名)'}`);
     console.log(`🎨 风格: ${style}`);
     
-    const { data: project, error } = await supabase
+    const { data: project, error } = await supabaseAdmin
       .from('projects')
       .insert({
         user_id: userId,
