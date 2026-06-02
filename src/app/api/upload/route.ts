@@ -90,10 +90,10 @@ export async function POST(request: NextRequest) {
         .select()
         .single();
 
-      // 创建 hero_design 记录
+      // 创建 hero_design 记录（初始为空，等 AI 生成或用户手动填写）
       const { data: hero } = await supabaseAdmin
         .from('hero_designs')
-        .insert({ project_id: project.id, name: '张三', species: '人类', color: '蓝色', costume: '校服', prop: '书包' })
+        .insert({ project_id: project.id, name: '', species: '', color: '', costume: '', prop: '' })
         .select()
         .single();
 

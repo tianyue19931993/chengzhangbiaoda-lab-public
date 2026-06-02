@@ -403,10 +403,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
         initialLoaded.current = true;
       }
-      // 轮询时：只同步 hero_designs（不在编辑状态）
-      else {
-        setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
-      }
+      // 轮询时：不覆盖 hero_designs（避免覆盖用户正在编辑的内容）
+      // else {
+      //   setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
+      // }
     } catch (e: any) {
       setError(e.message);
     } finally {
