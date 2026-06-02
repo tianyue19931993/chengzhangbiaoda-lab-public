@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const prompts = buildPrompts(storyObj, style);
     console.log(`🎨 生成 ${prompts.length} 条分镜 Prompt`);
 
-    // Step 5: 存入数据库
+    // Step 5: 存入数据库（projects 表 + images 表）
     const { error: dbError } = await supabaseAdmin
       .from('projects')
       .update({
@@ -46,6 +46,26 @@ export async function POST(request: NextRequest) {
     if (dbError) {
       console.error('❌ 保存故事失败:', dbError);
       return NextResponse.json({ success: false, error: dbError.message }, { status: 500 });
+    }
+
+    // Step 6: 往 images 表插入 9 条分镜记录（含 prompt/scene_title）
+    const imageRows = prompts.map((prompt: string, i: number) => ({
+      project_id:  projectId,
+      order_index: i,
+      prompt:      prompt,
+      scene_title: storyObj.storyboard?.[i]?.title || `分镜 ${i + 1}`,
+      status:      'pending',
+      regeneration_count: 0,
+    }));
+    const { error: imgError } = await supabaseAdmin.from('images').upsert(imageRows, {
+      onConflict: 'project_id,order_index',
+      ignoreDuplicates: false,
+    });
+    if (imgError) {
+      console.error('❌ 插入 images 记录失败:', imgError);
+      // 不阻断主流程，只警告
+    } else {
+      console.log(`✅ 已插入/更新 ${imageRows.length} 条 images 记录`);
     }
 
     console.log('✅ generate-story 完成');

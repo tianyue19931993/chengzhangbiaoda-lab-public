@@ -21,7 +21,7 @@ interface Project {
 
 interface Image {
   id: string;
-  url: string;
+  url: string | null;
   prompt: string;
   order_index: number;
   regeneration_count: number;
@@ -55,6 +55,15 @@ const DEFAULT_PROMPTS = [
   "回到地面，小朋友躺在床上熟睡，彩虹猫趴在枕边守护，月光洒进房间，温馨宁静，Pixar风格",
   "小朋友醒来发现桌上多了一张画：自己和彩虹猫的合影，阳光洒进来，幸福微笑，Pixar 3D结局",
 ];
+
+// 默认占位图（灰色底 + 图片图标 SVG）
+const PLACEHOLDER_SVG = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+    <rect width="640" height="360" fill="#e5e7eb"/>
+    <text x="320" y="170" text-anchor="middle" font-size="60" fill="#9ca3af">🖼️</text>
+    <text x="320" y="220" text-anchor="middle" font-size="18" fill="#9ca3af">等待生成</text>
+  </svg>`
+)}`;
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -133,6 +142,11 @@ export default function ProjectDetailPage() {
 
   const storyData = getStoryData();
 
+  // 获取指定 order_index 的图片记录（含 prompt）
+  const getImageByIndex = (index: number): Image | null => {
+    return project?.images?.find(img => img.order_index === index) || null;
+  };
+
   // 保存标题
   const saveTitle = async () => {
     if (!project) return;
@@ -178,6 +192,7 @@ export default function ProjectDetailPage() {
 
   // 单图下载
   const handleDownloadImage = async (url: string, index: number) => {
+    if (!url) return;
     setDownloadingIndex(index);
     try {
       const res = await fetch(url);
@@ -296,7 +311,7 @@ export default function ProjectDetailPage() {
 
   // 从 Lightbox 直接重新生成（用当前 prompt）
   const handleRegenImageDirectly = async (orderIndex: number) => {
-    const image = project?.images?.find((i: any) => i.order_index === orderIndex);
+    const image = getImageByIndex(orderIndex);
     if (!image || (image.regeneration_count ?? 0) >= 1) {
       alert('该图片已达到最大重生次数（1次）');
       return;
@@ -311,6 +326,33 @@ export default function ProjectDetailPage() {
       if (data.success) {
         alert('✅ 重新生成中，请稍后刷新查看');
         setLightboxIndex(null);
+        loadProject();
+      } else {
+        alert(`❌ ${data.error || '重新生成失败'}`);
+      }
+    } catch (e) {
+      alert('❌ 重新生成失败');
+    }
+  };
+
+  // 在 Lightbox 中修改 Prompt 后重新生成
+  const handleRegenFromLightboxWithPrompt = async () => {
+    const newPrompt = promptInput.trim();
+    if (!newPrompt) { alert('请输入 Prompt'); return; }
+    const image = getImageByIndex(lightboxIndex!);
+    if (!image) return;
+    try {
+      const res = await fetch('/api/regenerate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project?.id, orderIndex: image.order_index, prompt: newPrompt }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ 重新生成中，请稍后刷新查看');
+        setLightboxIndex(null);
+        setEditingPromptIndex(null);
+        setPromptInput('');
         loadProject();
       } else {
         alert(`❌ ${data.error || '重新生成失败'}`);
@@ -475,38 +517,37 @@ export default function ProjectDetailPage() {
 
             <div className="grid grid-cols-3 gap-2 md:gap-4">
               {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => {
-                const image = project.images?.find(img => img.order_index === index);
+                const image = getImageByIndex(index);
                 const hasImage = image && image.url;
-                const prompt = storyData.prompts[index] || `分镜 ${index + 1}`;
+                const displaySrc = hasImage ? image!.url! : PLACEHOLDER_SVG;
                 const sceneTitle = image?.scene_title || storyData.storyboard?.[index]?.title || `分镜 ${index + 1}`;
 
                 return (
                   <div key={index} className="relative group">
-                    {/* 图片或空位 - 16:9 比例 */}
-                    {hasImage ? (
-                      <>
-                        <img
-                          src={image.url}
-                          alt={sceneTitle}
-                          className="w-full aspect-video rounded-2xl shadow-lg object-cover cursor-pointer hover:scale-[1.02] transition-transform"
-                          onClick={() => setLightboxIndex(index)}
-                        />
-                        {/* 悬浮操作按钮 */}
-                        <div className="absolute top-1 right-1 md:top-2 md:right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleRegenImage(image.id, index); }}
-                            className="bg-orange-400 text-white rounded-full w-7 h-7 md:w-10 md:h-10 flex items-center justify-center text-sm md:text-lg shadow-lg"
-                            title="重新生成这张图"
-                          >
-                            🔄
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      /* 空位占位 - 16:9 */
-                      <div className="w-full aspect-video rounded-2xl bg-gray-100 border-3 border-dashed border-gray-300 flex flex-col items-center justify-center">
-                        <div className="text-2xl md:text-4xl mb-1 opacity-30">🖼️</div>
-                        <span className="text-xs md:text-sm text-gray-400">分镜 {index + 1}</span>
+                    <img
+                      src={displaySrc}
+                      alt={sceneTitle}
+                      className={`w-full aspect-video rounded-2xl shadow-lg object-cover cursor-pointer hover:scale-[1.02] transition-transform ${hasImage ? '' : 'opacity-60'}`}
+                      onClick={() => setLightboxIndex(index)}
+                    />
+                    {/* 悬浮操作按钮（仅已生成图片显示） */}
+                    {hasImage && (
+                      <div className="absolute top-1 right-1 md:top-2 md:right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRegenImage(image!.id, index); }}
+                          className="bg-orange-400 text-white rounded-full w-7 h-7 md:w-10 md:h-10 flex items-center justify-center text-sm md:text-lg shadow-lg"
+                          title="重新生成这张图"
+                        >
+                          🔄
+                        </button>
+                      </div>
+                    )}
+                    {/* 未生成时显示"等待生成"遮罩 */}
+                    {!hasImage && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <span className="text-xs md:text-sm text-gray-400 bg-white/70 rounded-full px-2 py-0.5">
+                          等待生成
+                        </span>
                       </div>
                     )}
                   </div>
@@ -552,11 +593,6 @@ export default function ProjectDetailPage() {
                   <span className="text-gray-600 text-sm">
                     已生成 · 剩余重生机会：{1 - (project.videos[0].generation_count ?? 0)}
                   </span>
-                  {(project.videos[0].generation_count ?? 0) < 1 && (
-                    <KidButton onClick={handleRegenVideo} className="bg-orange-400 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base">
-                      🔄 重新生成视频
-                    </KidButton>
-                  )}
                 </div>
               </div>
             ) : (
@@ -588,18 +624,20 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* ===== Lightbox 放大查看 ===== */}
-      {lightboxIndex !== null && project?.images?.[lightboxIndex] && (
+      {lightboxIndex !== null && (
         <div
           ref={lightboxRef}
           className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-2 md:p-8 cursor-pointer"
           onClick={() => setLightboxIndex(null)}
         >
+          {/* 大图 */}
           <img
-            src={project.images[lightboxIndex].url}
+            src={getImageByIndex(lightboxIndex)?.url || PLACEHOLDER_SVG}
             alt={`分镜 ${lightboxIndex + 1}`}
             className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
             onClick={(e) => e.stopPropagation()}
           />
+
           {/* 关闭按钮 */}
           <button
             onClick={() => setLightboxIndex(null)}
@@ -607,20 +645,34 @@ export default function ProjectDetailPage() {
           >
             ✕
           </button>
+
           {/* 底部信息 + 操作按钮 */}
           <div className="fixed bottom-2 md:bottom-6 left-0 right-0 text-white text-center px-2 md:px-4 z-50">
-            <p className="text-sm md:text-base font-bold mb-2">分镜 {lightboxIndex + 1}：{project.images[lightboxIndex]?.scene_title || ''}</p>
+            <p className="text-sm md:text-base font-bold mb-2">
+              分镜 {lightboxIndex + 1}：{getImageByIndex(lightboxIndex)?.scene_title || ''}
+            </p>
+            {/* 显示当前 Prompt */}
+            <p className="text-xs md:text-sm text-gray-300 mb-2 max-w-2xl mx-auto truncate">
+              Prompt: {getImageByIndex(lightboxIndex)?.prompt || '（暂无 Prompt）'}
+            </p>
             <div className="flex justify-center gap-2 flex-wrap">
-              <button
-                onClick={() => handleDownloadImage(project.images[lightboxIndex].url, lightboxIndex)}
-                className="bg-blue-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-blue-600 transition-colors"
-                disabled={downloadingIndex === lightboxIndex}
-              >
-                {downloadingIndex === lightboxIndex ? '⏳' : '⬇️ 下载'}
-              </button>
+              {/* 已生成图片：显示下载按钮 */}
+              {getImageByIndex(lightboxIndex)?.url && (
+                <button
+                  onClick={() => {
+                    const img = getImageByIndex(lightboxIndex);
+                    if (img?.url) handleDownloadImage(img.url!, lightboxIndex);
+                  }}
+                  className="bg-blue-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-blue-600 transition-colors"
+                  disabled={downloadingIndex === lightboxIndex}
+                >
+                  {downloadingIndex === lightboxIndex ? '⏳' : '⬇️ 下载'}
+                </button>
+              )}
+              {/* 修改 Prompt 按钮（打开编辑弹窗） */}
               <button
                 onClick={() => {
-                  setPromptInput(project.images[lightboxIndex]?.prompt || '');
+                  setPromptInput(getImageByIndex(lightboxIndex)?.prompt || '');
                   setEditingPromptIndex(lightboxIndex);
                   setLightboxIndex(null);
                 }}
@@ -628,15 +680,18 @@ export default function ProjectDetailPage() {
               >
                 ✏️ 改Prompt
               </button>
-              <button
-                onClick={() => handleRegenImageDirectly(lightboxIndex)}
-                className="bg-orange-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-orange-600 transition-colors"
-                disabled={(project.images[lightboxIndex]?.regeneration_count ?? 0) >= 1}
-              >
-                🔄 重生成
-              </button>
+              {/* 重新生成按钮（仅未满次数时） */}
+              {(getImageByIndex(lightboxIndex)?.regeneration_count ?? 0) < 1 && (
+                <button
+                  onClick={() => handleRegenImageDirectly(lightboxIndex)}
+                  className="bg-orange-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-orange-600 transition-colors"
+                >
+                  🔄 重生成
+                </button>
+              )}
             </div>
           </div>
+
           {/* 左右切换 */}
           <button
             onClick={(e) => { e.stopPropagation(); setLightboxIndex(Math.max(0, lightboxIndex - 1)); }}
@@ -646,9 +701,9 @@ export default function ProjectDetailPage() {
             ‹
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); setLightboxIndex(Math.min((project?.images?.length || 1) - 1, lightboxIndex + 1)); }}
+            onClick={(e) => { e.stopPropagation(); setLightboxIndex(Math.min(8, lightboxIndex + 1)); }}
             className="fixed right-2 md:right-6 top-1/2 -translate-y-1/2 text-white text-3xl md:text-5xl z-50 hover:scale-110 transition-transform"
-            disabled={lightboxIndex === (project?.images?.length || 1) - 1}
+            disabled={lightboxIndex === 8}
           >
             ›
           </button>
@@ -678,7 +733,7 @@ export default function ProjectDetailPage() {
               </KidButton>
               <KidButton
                 onClick={() => {
-                  const img = project?.images?.find((_, i) => i === editingPromptIndex);
+                  const img = getImageByIndex(editingPromptIndex);
                   if (img) handleRegenImageWithPrompt(img.id, editingPromptIndex);
                 }}
                 className="bg-purple-500 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base"
