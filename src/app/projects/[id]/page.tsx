@@ -117,6 +117,7 @@ function Lightbox({
             value={editPrompt}
             onChange={(e) => setEditPrompt(e.target.value)}
             rows={5}
+            placeholder="输入分镜图的生图 Prompt，留空将使用默认 Prompt..."
             className="w-full border-2 border-purple-300 rounded-xl p-3 text-sm font-mono focus:border-purple-500 focus:outline-none resize-y"
           />
           <div className="flex gap-3 mt-3 justify-end">
@@ -213,7 +214,7 @@ function StoryboardCard({
         className={`relative rounded-2xl overflow-hidden shadow-lg cursor-pointer group transition-transform hover:scale-105 ${
           item.status === 'success' ? 'aspect-video' : 'aspect-video'
         }`}
-        onClick={() => item.status === 'success' && setLightbox(true)}
+                onClick={() => setLightbox(true)}
       >
         {/* 渐变背景/图片 */}
         <div className={`absolute inset-0 bg-gradient-to-br ${colorClass}`}>
@@ -588,7 +589,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               </span>
               <button
                 onClick={generateAllImages}
-                disabled={!allImagesDone || project.status === 'storyboard_done'}
+                disabled={project.status === 'drafting'}
                 className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-2xl font-bold hover:from-pink-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm md:text-base shadow-lg"
               >
                 🚀 一键出分镜图
@@ -625,7 +626,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </h2>
             <button
               onClick={generateVideo}
-              disabled={generatingVideo || !canGenerateVideo}
+              disabled={generatingVideo}
               className="px-6 py-3 bg-gradient-to-r from-green-400 to-teal-400 text-white rounded-2xl font-bold hover:from-green-500 hover:to-teal-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm md:text-base shadow-lg"
             >
               {generatingVideo ? '⏳ 生成中...' : video?.status === 'processing' ? '🎬 生成中...' : '🎬 生成视频'}

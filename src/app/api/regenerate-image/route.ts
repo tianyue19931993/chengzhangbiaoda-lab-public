@@ -36,7 +36,17 @@ export async function POST(request: NextRequest) {
 
     // ── 调用豆包生图 API ─────────────────────────────────
     if (!process.env.DOUBAO_API_KEY) {
-      return NextResponse.json({ success: false, error: 'DOUBAO_API_KEY 未配置，无法生成图片' }, { status: 503 });
+      // 无 API Key：返回默认占位图 URL（不报错，让前端有反馈）
+      const defaultUrl = `https://via.placeholder.com/1024x576/667eea/ffffff?text=分镜${Number(sortOrder)}+默认图`;
+      console.log('⚠️ DOUBAO_API_KEY 未配置，返回默认占位图');
+
+      const { error: updateErr } = await supabaseAdmin
+        .from('storyboard_items')
+        .update({ prompt: prompt.trim(), image_url: defaultUrl, status: 'success' })
+        .eq('id', item.id);
+      if (updateErr) throw updateErr;
+
+      return NextResponse.json({ success: true, data: { url: defaultUrl, sortOrder } });
     }
 
     const imageUrl = await generateImage(prompt);
