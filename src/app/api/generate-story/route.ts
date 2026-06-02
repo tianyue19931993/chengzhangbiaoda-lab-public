@@ -100,11 +100,11 @@ export async function POST(request: NextRequest) {
 
     // ── 写入数据库 ───────────────────────────────────────
 
-    // 1) hero_designs 表
-    const { error: heroErr } = await supabaseAdmin.from('hero_designs').upsert(
-      { project_id: projectId, ...heroDesign },
-      { onConflict: 'project_id' }
-    );
+    // 1) hero_designs 表（先删后插，避免 upsert 冲突）
+    await supabaseAdmin.from('hero_designs').delete().eq('project_id', projectId);
+    const { error: heroErr } = await supabaseAdmin.from('hero_designs').insert({
+      project_id: projectId, ...heroDesign,
+    });
     if (heroErr) console.error('⚠️ hero_designs 写入失败:', heroErr);
 
     // 2) storyboard_items 表（先删后插，保证 9 条）
