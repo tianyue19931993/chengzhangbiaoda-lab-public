@@ -109,53 +109,6 @@ export async function PATCH(
     // 更新 stories 表（如果传了 story_content 或 story）
     const finalStory = story_content !== undefined ? story_content : story;
     if (finalStory !== undefined) {
-      // 先查是否已有 story 记录
-      const { data: existingStory } = await supabaseAdmin
-        .from('stories')
-        .select('id')
-        .eq('project_id', id)
-        .maybeSingle();
-
-      if (existingStory) {
-        // 已有记录，更新
-        await supabaseAdmin.from('stories').update({ content: finalStory }).eq('id', existingStory.id);
-      } else {
-        // 新建 story 记录
-        const { data: newStory } = await supabaseAdmin.from('stories').insert({
-          project_id: id,
-          content: finalStory,
-          title: title ?? '未命名故事',
-        }).select('id').single();
-      }
-    }
-
-    // 更新 hero_designs 表（upsert，兼容 hero_design 或 hero_designs）
-    if (hero_designs !== undefined || hero_design !== undefined) {
-      const hdRaw = hero_designs ?? hero_design;
-      const hd = typeof hdRaw === 'string' ? JSON.parse(hdRaw) : hdRaw;
-      
-      // 先查是否已有记录
-      const { data: existingHero } = await supabaseAdmin
-        .from('hero_designs')
-        .select('id')
-        .eq('project_id', id)
-        .maybeSingle();
-
-      if (existingHero) {
-        // 已有记录，更新
-        const { error: heroErr } = await supabaseAdmin
-          .from('hero_designs')
-          .update(hd)
-          .eq('id', existingHero.id);
-        if (heroErr) console.error('⚠️ hero_design 更新失败:', heroErr);
-      } else {
-        // 新建记录
-        const { error: heroErr } = await supabaseAdmin
-          .from('hero_designs')
-          .insert({ project_id: id, ...hd });
-        if (heroErr) console.error('⚠️ hero_design 创建失败:', heroErr);
-      }
-    }
 
     // 重新查询完整数据返回
     const { data: project } = await supabaseAdmin
