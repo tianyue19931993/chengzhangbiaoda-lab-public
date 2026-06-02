@@ -6,7 +6,7 @@ import { downloadImageToBuffer, uploadToSupabaseStorage } from '@/lib/storage-he
 /**
  * POST /api/generate-video
  * 调用豆包 Seedance 2.0 生成 15 秒 16:9 动画视频
- * 参考：9 张分镜图 + 故事文本 + 风格 Prompt
+ * 无 API Key 时降级：下载示例视频上传到 Supabase Storage
  */
 export async function POST(request: NextRequest) {
   try {
@@ -25,7 +25,6 @@ export async function POST(request: NextRequest) {
       .eq('project_id', projectId);
 
     if ((count || 0) >= 1) {
-      // TODO: 接入支付，付费后允许重生
       return NextResponse.json(
         { success: false, error: '已生成过视频，需要付费才能重新生成', needPayment: true, price: 9.9 },
         { status: 402 }
@@ -56,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`📺 视频记录创建: ${video.id}`);
 
-    // 异步调用豆包视频生成（不阻塞返回）
+    // 异步调用视频生成（不阻塞返回）
     generateVideoAsync(projectId, video.id, imageUrls, prompt, style);
 
     return NextResponse.json({
@@ -71,6 +70,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * 异步生成视频，完成后更新数据库
+ * 无 API Key 时降级使用示例视频
  */
 async function generateVideoAsync(
   projectId: string,
@@ -80,16 +80,30 @@ async function generateVideoAsync(
   style: string
 ) {
   try {
-    console.log(`🎬 开始调用豆包视频生成 API...`);
-    const videoUrl = await generateVideo(imageUrls, prompt, style);
+    console.log(`🎬 开始生成视频 | hasKey=${!!process.env.DOUBAO_API_KEY}`);
 
-    if (!videoUrl) throw new Error('视频生成返回为空');
+    let finalUrl: string;
+    const hasKey = !!process.env.DOUBAO_API_KEY;
 
-    // 下载视频上传到 Supabase Storage
-    console.log('📥 下载视频...');
-    const { buffer, contentType } = await downloadImageToBuffer(videoUrl);
-    const fileName = `${projectId}/video_${Date.now()}.mp4`;
-    const finalUrl = await uploadToSupabaseStorage('videos', fileName, buffer, contentType || 'video/mp4');
+    if (!hasKey) {
+      console.warn('⚠️ DOUBAO_API_KEY 未设置，使用默认示例视频');
+      // 下载示例视频并上传到 Supabase Storage
+      const placeholderUrl = 'https://www.w3schools.com/html/mov_bbb.mp4';
+      console.log('📥 下载示例视频...');
+      const { buffer, contentType } = await downloadImageToBuffer(placeholderUrl);
+      const fileName = `${projectId}/placeholder_${Date.now()}.mp4`;
+      finalUrl = await uploadToSupabaseStorage('videos', fileName, buffer, contentType || 'video/mp4');
+      console.log(`✅ 默认视频已上传: ${finalUrl}`);
+    } else {
+      console.log(`🎬 调用豆包视频生成 API...`);
+      const videoUrl = await generateVideo(imageUrls, prompt, style);
+      if (!videoUrl) throw new Error('视频生成返回为空');
+
+      console.log('📥 下载视频...');
+      const { buffer, contentType } = await downloadImageToBuffer(videoUrl);
+      const fileName = `${projectId}/video_${Date.now()}.mp4`;
+      finalUrl = await uploadToSupabaseStorage('videos', fileName, buffer, contentType || 'video/mp4');
+    }
 
     // 更新数据库
     await supabaseAdmin
