@@ -1,7 +1,36 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+
+// ── 无 API 降级：获取默认数据 ──────────────────────
+interface DefaultData {
+  story?: any;
+  hero?: any;
+  storyboard?: any[];
+  video?: any;
+}
+
+async function fetchDefaultData(): Promise<DefaultData | null> {
+  try {
+    const res = await fetch('/api/default-data');
+    const data = await res.json();
+    return data.success ? data.data : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchConfig(): Promise<{ hasAnyApi: boolean }> {
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    return { hasAnyApi: data.data?.hasAnyApi ?? false };
+  } catch {
+    return { hasAnyApi: false };
+  }
+}
 
 // ── 类型定义 ──────────────────────────────────────────────
 interface HeroDesign {
@@ -263,6 +292,9 @@ function StoryboardCard({
 
 // ── 主页面 ────────────────────────────────────────────────
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  // ── 无 API 降级状态 ──
+  const [hasAnyApi, setHasAnyApi]           = useState<boolean | null>(null);
+  const [defaultData, setDefaultData]         = useState<DefaultData | null>(null);
   const [project, setProject]       = useState<Project | null>(null);
   const [loading, setLoading]        = useState(true);
   const [error, setError]            = useState('');
@@ -290,6 +322,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     params.then(({ id }) => setProjectId(id));
   }, [params]);
+
+  // ── 检查 API 配置 + 拉取默认数据 ──
+  useEffect(() => {
+    fetchConfig().then(({ hasAnyApi }) => {
+      setHasAnyApi(hasAnyApi);
+      if (!hasAnyApi) {
+        fetchDefaultData().then(setDefaultData);
+      }
+    });
+  }, []);
 
   // ── 加载项目 ───────────────────────────────────────────
   const loadProject = useCallback(async (id: string) => {
@@ -319,23 +361,45 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       // 如果 storyboard_items 为空（从旧结构迁入），生成默认 9 条
       if (!p.storyboard_items || p.storyboard_items.length === 0) {
-        p.storyboard_items = Array.from({ length: 9 }, (_, i) => ({
-          id:          `placeholder-${i}`,
-          sort_order:  i + 1,
-          title:       ['英雄原本生活','问题出现','接受任务','遇到困难','获得帮助','开始成长','真相浮现','最终挑战','英雄归来'][i],
-          description: '',
-          prompt:      '',
-          image_url:   null,
-          status:      'pending',
-        }));
+        // 无 API 时尝试用默认分镜数据
+        if (defaultData?.storyboard && defaultData.storyboard.length > 0) {
+          p.storyboard_items = defaultData.storyboard.map((s: any, i: number) => ({
+            id:          s.id ?? `default-${i}`,
+            sort_order:  s.sort_order ?? i + 1,
+            title:       s.title ?? `分镜 ${i + 1}`,
+            description: s.description ?? '',
+            prompt:      s.prompt ?? '',
+            image_url:   s.image_url ?? null,
+            status:      s.image_url ? 'success' as const : 'pending' as const,
+          }));
+        } else {
+          p.storyboard_items = Array.from({ length: 9 }, (_, i) => ({
+            id:          `placeholder-${i}`,
+            sort_order:  i + 1,
+            title:       ['英雄原本生活','问题出现','接受任务','遇到困难','获得帮助','开始成长','真相浮现','最终挑战','英雄归来'][i],
+            description: '',
+            prompt:      '',
+            image_url:   null,
+            status:      'pending',
+          }));
+        }
       }
 
       setProject(p);
 
+      // 无 API 时：用默认数据填补展示
+      if (!hasAnyApi && defaultData) {
+        if (defaultData.hero && !p.hero_designs?.name) {
+          p.hero_designs = defaultData.hero;
+        }
+      }
+
       // 只在首次加载时设置编辑值，后续轮询不覆盖用户输入
       if (!initialLoaded.current) {
         setEditingTitle(p.title ?? '');
-        setEditingStory((p as any).story_content ?? p.story ?? '');
+        // 无 API 时用默认故事填入编辑区
+        const initialStory = (p as any).story_content ?? p.story ?? '';
+        setEditingStory(!initialStory && defaultData?.story?.content ? defaultData.story.content : initialStory);
         setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
         initialLoaded.current = true;
       }
@@ -409,6 +473,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   // ── 生成全部九宫格 ─────────────────────────────────────
   const generateAllImages = async () => {
+    // 无 API 时：直接用默认分镜（已填入 project.storyboard_items），仅提示用户
+    if (!hasAnyApi) {
+      alert('⚠️ 当前未配置 AI API，已展示默认示例分镜图。\n配置 API 后可生成专属分镜。');
+      return;
+    }
     const res  = await fetch('/api/generate-images', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -421,6 +490,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   // ── 生成视频 ───────────────────────────────────────────
   const generateVideo = async () => {
+    // 无 API 时：直接展示默认视频
+    if (!hasAnyApi && defaultData?.video) {
+      setProject((p) => p ? { ...p, videos: [defaultData.video] } : p);
+      alert('⚠️ 当前未配置 AI API，已展示默认示例视频。\n配置 API 后可生成专属视频。');
+      return;
+    }
     setGeneratingVideo(true);
     setVideoError('');
     try {
@@ -491,6 +566,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-8">
 
+        {/* ── 无 API 提示 ────────────────────────────── */}
+        {hasAnyApi === false && (
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-2xl">
+            <p className="text-yellow-800 font-bold text-center">
+              ⚠️ 当前未配置 AI API（豆包），所有内容均展示默认示例数据。<br/>
+              配置 <code className="bg-yellow-200 px-1 rounded">DOUBAO_API_KEY</code> 后可生成专属内容。
+            </p>
+          </div>
+        )}
+
         {/* ── 顶部导航 ────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <Link href="/my-works" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-purple-700 hover:bg-white transition-colors shadow">
@@ -498,7 +583,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </Link>
           <div className="text-center">
             <h1 className="text-2xl md:text-3xl font-bold text-purple-700">
-              {project.title || '创意动画项目'}
+              {editingTitle || project.title || '创意动画项目'}
             </h1>
             <p className="text-purple-500 text-sm">
               👧 {project.child_name} · {STYLE_NAMES[project.style_id] ?? project.style_id}
@@ -547,6 +632,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               className="px-8 py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
             >
               {savingText ? '💾 保存中...' : '💾 保存'}
+            </button>
+            {/* 无 API 时也可点击，走降级逻辑 */}
+            <button
+              onClick={generateAllImages}
+              disabled={project.status === 'drafting'}
+              className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-2xl font-bold hover:from-pink-600 hover:to-purple-600 disabled:opacity-40 transition-all text-sm md:text-base shadow-lg"
+            >
+              🎨 一键出分镜图
+            </button>
+            <button
+              onClick={generateVideo}
+              disabled={generatingVideo || (!allImagesDone && !defaultData?.video)}
+              className="px-6 py-3 bg-gradient-to-r from-green-400 to-teal-400 text-white rounded-2xl font-bold hover:from-green-500 hover:to-teal-500 disabled:opacity-40 transition-all text-sm md:text-base shadow-lg"
+            >
+              {generatingVideo ? '⏳ 生成中...' : video?.status === 'processing' ? '🎬 生成中...' : '🎬 生成视频'}
             </button>
             {saveErr && <span className="text-red-500 text-sm font-bold">❌ {saveErr}</span>}
           </div>
