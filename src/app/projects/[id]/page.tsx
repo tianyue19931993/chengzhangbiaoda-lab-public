@@ -492,9 +492,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
         {/* ── 区域 1：故事区域 ──────────────────────────── */}
         <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-            📖 故事
-          </h2>
+          {/* 作品名称（可编辑） */}
+          <div className="mb-4">
+            <label className="block text-sm font-bold text-gray-500 mb-1">作品名称</label>
+            <input
+              type="text"
+              value={editingTitle}
+              onChange={(e) => setEditingTitle(e.target.value)}
+              className="w-full border-2 border-purple-200 rounded-xl px-4 py-3 text-2xl font-bold text-gray-800 focus:border-purple-500 focus:outline-none transition-colors"
+            />
+          </div>
 
           {/* 小朋友名字（只读） */}
           <div className="mb-4 flex items-center gap-2 text-gray-500 text-sm">

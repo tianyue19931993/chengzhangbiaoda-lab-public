@@ -13,13 +13,10 @@ export async function GET(request: NextRequest) {
 
     if (!userId) return NextResponse.json({ success: false, error: '缺少 userId' }, { status: 400 });
 
+    // 先查主表（避免联合查询子表无数据时报错）
     const { data: projects, error, count } = await supabaseAdmin
       .from('projects')
-      .select(`
-        *,
-        storyboard_items(id, image_url, sort_order),
-        videos(id, url, status)
-      `, { count: 'exact' })
+      .select('*', { count: 'exact' })
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
