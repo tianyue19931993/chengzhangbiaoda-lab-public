@@ -7,6 +7,7 @@ import { formatDateTime } from '@/lib/utils';
 
 interface Project {
   id: string;
+  user_id: string;
   title: string;
   story: string;
   style: string;
