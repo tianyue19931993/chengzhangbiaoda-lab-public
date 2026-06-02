@@ -58,11 +58,11 @@ Style: ${style.imagePromptSuffix}`.trim();
 
 /** 默认 hero_design（API Key 未配置时降级使用） */
 export const DEFAULT_HERO_DESIGN = {
-  name: '小朋友f432703',
-  species: '彩色小朋友',
-  color: '彩虹七色',
-  costume: '画笔图案的T恤',
-  prop: '魔法画笔',
+  name: '张三（默认）',
+  species: '人（默认）',
+  color: '黄的（默认）',
+  costume: '红色披风（默认）',
+  prop: '剑（默认）',
 };
 
 /** 默认故事正文（API Key 未配置时降级使用） */
