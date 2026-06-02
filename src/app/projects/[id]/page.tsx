@@ -67,11 +67,24 @@ export default function ProjectDetailPage() {
   const [titleInput, setTitleInput] = useState('');
   const [editingStory, setEditingStory] = useState(false);
   const [storyInput, setStoryInput] = useState('');
+  const [childName, setChildName] = useState('');
   
   // 加载项目详情
   useEffect(() => {
     if (projectId) loadProject();
   }, [projectId]);
+  
+  // 加载用户名字
+  useEffect(() => {
+    if (project?.user_id) {
+      fetch(`/api/users/${project.user_id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) setChildName(data.data.name || '');
+        })
+        .catch(() => {});
+    }
+  }, [project?.user_id]);
   
   const loadProject = async () => {
     setLoading(true);
@@ -231,6 +244,12 @@ export default function ProjectDetailPage() {
                   {getStyleName(project.style)}
                 </span>
               </div>
+            )}
+            {/* 显示小朋友名字 */}
+            {childName && childName !== '小朋友' && (
+              <p className="text-purple-600 font-bold text-lg mt-2">
+                👧 {childName}
+              </p>
             )}
             <p className="text-gray-500 mt-2">
               创建于 {formatDateTime(project.created_at)}

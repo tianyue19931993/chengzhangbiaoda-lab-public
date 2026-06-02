@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const userId = formData.get('userId') as string;
+    const childName = (formData.get('childName') as string)?.trim() || '小朋友';
     
     if (!file) {
       return NextResponse.json(
@@ -28,16 +29,20 @@ export async function POST(request: NextRequest) {
     console.log(`📏 文件大小: ${(file.size / 1024).toFixed(2)} KB`);
     console.log(`📂 文件类型: ${file.type}`);
     
-    // 确保用户存在（自动创建）
+    // 确保用户存在（自动创建或更新名字）
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, name')
       .eq('id', userId)
       .single();
     
     if (!existingUser) {
-      await supabaseAdmin.from('users').insert({ id: userId, name: '小朋友' });
-      console.log(`👤 自动创建用户: ${userId}`);
+      await supabaseAdmin.from('users').insert({ id: userId, name: childName });
+      console.log(`👤 自动创建用户: ${userId}, 名字: ${childName}`);
+    } else if (existingUser.name === '小朋友' && childName !== '小朋友') {
+      // 如果之前是默认名字，更新为真实名字
+      await supabaseAdmin.from('users').update({ name: childName }).eq('id', userId);
+      console.log(`👤 更新用户名: ${userId} -> ${childName}`);
     }
     
     // 验证文件类型

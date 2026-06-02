@@ -14,6 +14,7 @@ interface Project {
   created_at: string;
   images: any[];
   videos: any[];
+  users: { name: string } | null;
 }
 
 export default function MyWorksPage() {
@@ -153,6 +154,12 @@ export default function MyWorksPage() {
                     <div className="text-gray-400 text-sm">
                         创建时间: {formatDateTime(project.created_at)}
                       </div>
+                      {/* 显示小朋友名字 */}
+                      {project.users?.name && project.users.name !== '小朋友' && (
+                        <div className="text-purple-600 text-sm font-bold mt-1">
+                          👧 {project.users.name}
+                        </div>
+                      )}
                   </div>
                 </div>
               </Link>

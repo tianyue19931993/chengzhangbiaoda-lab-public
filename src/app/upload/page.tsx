@@ -11,6 +11,7 @@ export default function UploadPage() {
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [childName, setChildName] = useState('');
   const [selectedStyle, setSelectedStyle] = useState<string>('pixar');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
@@ -59,6 +60,10 @@ export default function UploadPage() {
       alert('请先选择一张图片！');
       return;
     }
+    if (!childName.trim()) {
+      alert('请填写小朋友的名字！');
+      return;
+    }
     
     setIsUploading(true);
     setUploadProgress('📤 正在上传图片...');
@@ -71,6 +76,7 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append('file', selectedFile);
       formData.append('userId', userId);
+      formData.append('childName', childName.trim());
       
       const uploadRes = await fetch('/api/upload', {
         method: 'POST',
@@ -112,6 +118,21 @@ export default function UploadPage() {
         </p>
         
         <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12">
+          <div className="mb-8">
+            <label className="block text-2xl font-bold text-gray-800 mb-3">
+              👧 小朋友的名字 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={childName}
+              onChange={(e) => setChildName(e.target.value)}
+              placeholder="请输入小朋友的名字"
+              maxLength={20}
+              className="w-full border-4 border-purple-300 rounded-2xl px-6 py-4 text-2xl focus:border-purple-500 focus:outline-none transition-colors"
+              required
+            />
+          </div>
+          
           {/* 文件上传区域 */}
           <div className="mb-12">
             <h2 className="text-3xl font-bold text-gray-800 mb-6">

@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
       .from('projects')
       .select(`
         *,
+        users (name),
         images (*),
         videos (*)
       `)
