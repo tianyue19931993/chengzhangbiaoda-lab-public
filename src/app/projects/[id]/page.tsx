@@ -1,760 +1,679 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import KidButton from '@/components/KidButton';
-import { formatDateTime } from '@/lib/utils';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 
-interface Project {
-  id: string;
-  user_id: string;
-  title: string;
-  story: string;
-  style: string;
-  status: string;
-  original_image_url: string;
-  created_at: string;
-  child_name?: string;
-  images: Image[];
-  videos: Video[];
+// ── 类型定义 ──────────────────────────────────────────────
+interface HeroDesign {
+  name: string;
+  species: string;
+  color: string;
+  costume: string;
+  prop: string;
 }
 
-interface Image {
+interface StoryboardItem {
   id: string;
-  url: string | null;
+  sort_order: number;
+  title: string;
+  description: string;
   prompt: string;
-  order_index: number;
-  regeneration_count: number;
-  scene_title?: string;
+  image_url: string | null;
+  status: 'pending' | 'generating' | 'success' | 'failed';
 }
 
 interface Video {
   id: string;
-  url: string;
-  prompt: string;
+  url: string | null;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
   generation_count: number;
-  status: string;
 }
 
-const DEFAULT_STORY = `在一个充满魔法的小镇上，住着一个叫"小星星"的小朋友。小星星最喜欢画画了，每天都会用彩笔画出自己想象中的世界。
+interface Project {
+  id: string;
+  child_name: string;
+  title: string;
+  story: string;
+  style_id: string;
+  uploaded_image: string;
+  status: string;
+  created_at: string;
+  hero_designs: HeroDesign | null;
+  storyboard_items: StoryboardItem[];
+  videos: Video[];
+}
 
-有一天，小星星画了一只会飞的猫咪！这只猫咪有着彩虹色的毛发，眼睛像两颗闪闪发光的宝石。当小星星对着画作许愿时，神奇的事情发生了——画中的猫咪竟然活了过来！
+// ── 风格映射 ──────────────────────────────────────────────
+const STYLE_NAMES: Record<string, string> = {
+  pixar:     '🎬 Pixar 3D',
+  chinese:   '🏮 国风',
+  anime:     '🌸 二次元',
+  watercolor:'🎨 水彩',
+  cyberpunk: '🌃 赛博朋克',
+};
 
-彩虹猫带着小星星飞上了天空，他们一起穿过了云朵城堡，拜访了月亮婆婆，还在星河里游了个泳。最后，彩虹猫告诉小星星："只要你保持想象力，我永远都会陪着你。"
+// ── Lightbox 组件 ──────────────────────────────────────────
+function Lightbox({
+  item,
+  onClose,
+  onSave,
+  onRegenerate,
+}: {
+  item: StoryboardItem;
+  onClose: () => void;
+  onSave: (prompt: string) => void;
+  onRegenerate: (prompt: string) => void;
+}) {
+  const [editPrompt, setEditPrompt] = useState(item.prompt);
+  const [saving, setSaving] = useState(false);
+  const [regen, setRegen] = useState(false);
 
-从此以后，小星星的每一幅画都充满了魔法，而彩虹猫也成了小星星最好的朋友。`;
-
-const DEFAULT_PROMPTS = [
-  "一个可爱的小朋友坐在书桌前画画，房间温馨明亮，窗外阳光洒进来，Pixar 3D动画风格",
-  "小朋友画了一只彩虹色的猫咪，猫咪从画纸上缓缓浮现，眼睛发光，魔法粒子环绕，Pixar风格",
-  "彩虹猫完全从画中跳出来，小朋友惊讶又开心，房间被彩色光芒照亮，Pixar 3D风格",
-  "彩虹猫载着小朋友飞出窗户，穿过云朵，背景是蓝天和彩虹，梦幻场景，Pixar风格",
-  "云朵城堡出现在眼前，由柔软的白云构成，有门窗和塔楼，彩虹猫和小星星飞向城堡，Pixar风格",
-  "在云朵城堡内部，到处是棉花糖做的家具，月亮婆婆慈祥地笑着迎接他们，温暖氛围，Pixar风格",
-  "星河场景，璀璨的星星形成一条发光的河流，彩虹猫和小星星在星河中游泳，唯美梦幻，Pixar风格",
-  "回到地面，小朋友躺在床上熟睡，彩虹猫趴在枕边守护，月光洒进房间，温馨宁静，Pixar风格",
-  "小朋友醒来发现桌上多了一张画：自己和彩虹猫的合影，阳光洒进来，幸福微笑，Pixar 3D结局",
-];
-
-// 默认占位图（灰色底 + 图片图标 SVG）
-const PLACEHOLDER_SVG = `data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-    <rect width="640" height="360" fill="#e5e7eb"/>
-    <text x="320" y="170" text-anchor="middle" font-size="60" fill="#9ca3af">🖼️</text>
-    <text x="320" y="220" text-anchor="middle" font-size="18" fill="#9ca3af">等待生成</text>
-  </svg>`
-)}`;
-
-export default function ProjectDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const projectId = params.id as string;
-
-  const [project, setProject] = useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // 编辑状态
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleInput, setTitleInput] = useState('');
-  const [editingStory, setEditingStory] = useState(false);
-  const [storyInput, setStoryInput] = useState('');
-  const [childName, setChildName] = useState('');
-
-  // 新功能状态
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
-  const [promptInput, setPromptInput] = useState('');
-  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
-  const [generatingImages, setGeneratingImages] = useState(false);
-  const [generatingVideo, setGeneratingVideo] = useState(false);
-  const lightboxRef = useRef<HTMLDivElement>(null);
-
-  // 加载项目详情
-  useEffect(() => {
-    if (projectId) loadProject();
-  }, [projectId]);
-
-  // 加载用户名字
-  useEffect(() => {
-    if (project?.user_id) {
-      fetch(`/api/users/${project.user_id}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.success) setChildName(data.data.name || '');
-        })
-        .catch(() => {});
-    }
-  }, [project?.user_id]);
-
-  const loadProject = async () => {
-    setLoading(true);
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}`);
-      const data = await res.json();
-      if (data.success) {
-        setProject(data.data.project);
-      } else {
-        alert('❌ 项目不存在');
-        router.push('/my-works');
-      }
-    } catch (error) {
-      console.error('加载项目出错:', error);
+      await onSave(editPrompt);
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  // 解析故事数据
-  const getStoryData = () => {
-    if (!project?.story) return { story: DEFAULT_STORY, prompts: DEFAULT_PROMPTS, hero_design: null, storyboard: [] };
+  const handleRegen = async () => {
+    setRegen(true);
     try {
-      const parsed = JSON.parse(project.story);
-      return {
-        story: parsed.story || DEFAULT_STORY,
-        prompts: parsed.prompts || DEFAULT_PROMPTS,
-        hero_design: parsed.hero_design || null,
-        storyboard: parsed.storyboard || [],
-      };
-    } catch {
-      return { story: project.story || DEFAULT_STORY, prompts: DEFAULT_PROMPTS, hero_design: null, storyboard: [] };
-    }
-  };
-
-  const storyData = getStoryData();
-
-  // 获取指定 order_index 的图片记录（含 prompt）
-  const getImageByIndex = (index: number): Image | null => {
-    return project?.images?.find(img => img.order_index === index) || null;
-  };
-
-  // 保存标题
-  const saveTitle = async () => {
-    if (!project) return;
-    try {
-      const res = await fetch(`/api/projects/${projectId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: titleInput }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setProject({ ...project, title: titleInput });
-        setEditingTitle(false);
-      } else {
-        alert(`❌ 保存失败: ${data.error}`);
-      }
-    } catch (error) {
-      alert('❌ 保存失败');
-    }
-  };
-
-  // 保存故事
-  const saveStory = async () => {
-    if (!project) return;
-    try {
-      const newStoryJson = JSON.stringify({ story: storyInput, prompts: storyData.prompts, hero_design: storyData.hero_design, storyboard: storyData.storyboard });
-      const res = await fetch(`/api/projects/${projectId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story: newStoryJson }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setProject({ ...project, story: newStoryJson });
-        setEditingStory(false);
-      } else {
-        alert(`❌ 保存失败: ${data.error}`);
-      }
-    } catch (error) {
-      alert('❌ 保存失败');
-    }
-  };
-
-  // 单图下载
-  const handleDownloadImage = async (url: string, index: number) => {
-    if (!url) return;
-    setDownloadingIndex(index);
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `分镜${index + 1}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
-    } catch (e) {
-      alert('下载失败');
+      await onRegenerate(editPrompt);
+      onClose();
     } finally {
-      setDownloadingIndex(null);
+      setRegen(false);
     }
   };
 
-  // 用自定义 Prompt 重新生成单张图
-  const handleRegenImageWithPrompt = async (imageId: string, orderIndex: number) => {
-    const newPrompt = promptInput.trim();
-    if (!newPrompt) { alert('请输入 Prompt'); return; }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white rounded-t-3xl z-10">
+          <h3 className="text-xl font-bold text-gray-800">
+            🎬 分镜 {item.sort_order}「{item.title}」
+          </h3>
+          <button onClick={onClose} className="text-3xl text-gray-400 hover:text-gray-700 leading-none">×</button>
+        </div>
+
+        {/* 图片预览 */}
+        {item.image_url && (
+          <div className="p-4">
+            <img
+              src={item.image_url}
+              alt={item.title}
+              className="w-full rounded-2xl shadow-lg"
+            />
+          </div>
+        )}
+
+        {/* Prompt 编辑 */}
+        <div className="p-4 border-t">
+          <label className="block text-sm font-bold text-gray-700 mb-2">Prompt（可编辑）</label>
+          <textarea
+            value={editPrompt}
+            onChange={(e) => setEditPrompt(e.target.value)}
+            rows={5}
+            className="w-full border-2 border-purple-300 rounded-xl p-3 text-sm font-mono focus:border-purple-500 focus:outline-none resize-y"
+          />
+          <div className="flex gap-3 mt-3 justify-end">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-6 py-2 bg-blue-400 text-white rounded-xl font-bold hover:bg-blue-500 disabled:opacity-50 transition-colors"
+            >
+              {saving ? '⏳ 保存中...' : '💾 保存 Prompt'}
+            </button>
+            <button
+              onClick={handleRegen}
+              disabled={regen}
+              className="px-6 py-2 bg-purple-500 text-white rounded-xl font-bold hover:bg-purple-600 disabled:opacity-50 transition-colors"
+            >
+              {regen ? '⏳ 生成中...' : '🔄 重新生成'}
+            </button>
+          </div>
+        </div>
+
+        {/* 下载按钮 */}
+        {item.image_url && (
+          <div className="p-4 border-t flex justify-end">
+            <a
+              href={item.image_url}
+              download={`分镜${item.sort_order}_${item.title}.png`}
+              className="px-6 py-2 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition-colors"
+            >
+              ⬇️ 下载图片
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── 九宫格卡片组件 ────────────────────────────────────────
+function StoryboardCard({
+  item,
+  styleId,
+  projectId,
+  onUpdated,
+}: {
+  item: StoryboardItem;
+  styleId: string;
+  projectId: string;
+  onUpdated: (updated: StoryboardItem) => void;
+}) {
+  const [lightbox, setLightbox] = useState(false);
+  const [regenLoading, setRegenLoading] = useState(false);
+
+  const handleSavePrompt = async (prompt: string) => {
+    const res = await fetch('/api/regenerate-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, sortOrder: item.sort_order, prompt }),
+    });
+    const data = await res.json();
+    if (!data.success) alert(`❌ 保存失败: ${data.error}`);
+  };
+
+  const handleRegenerate = async (prompt: string) => {
+    setRegenLoading(true);
     try {
       const res = await fetch('/api/regenerate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project?.id, orderIndex, prompt: newPrompt }),
+        body: JSON.stringify({ projectId, sortOrder: item.sort_order, prompt }),
       });
       const data = await res.json();
-      if (data.success) {
-        alert('✅ 重新生成中，请稍后刷新查看');
-        setEditingPromptIndex(null);
-        setPromptInput('');
-        loadProject();
+      if (data.success && data.data?.url) {
+        onUpdated({ ...item, image_url: data.data.url, prompt, status: 'success' });
       } else {
-        alert(`❌ ${data.error || '重新生成失败'}`);
+        alert(`❌ 生成失败: ${data.error}`);
       }
-    } catch (e) {
-      alert('❌ 重新生成失败');
-    }
-  };
-
-  // 单张图片重新生成（用当前 prompt）
-  const handleRegenImage = async (imageId: string, orderIndex: number) => {
-    if (!project) return;
-    const img = project.images.find(i => i.id === imageId);
-    if (!img || (img.regeneration_count ?? 0) >= 1) {
-      alert('❌ 该图片已达到最大重生次数（1次）');
-      return;
-    }
-    setPromptInput(img.prompt || '');
-    setEditingPromptIndex(orderIndex);
-  };
-
-  // 一键生成全部九宫格分镜图
-  const handleGenerateAllImages = async () => {
-    if (!project) return;
-    setGeneratingImages(true);
-    try {
-      const res = await fetch('/api/generate-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, style: project.style }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('✅ 分镜图生成中，请稍后刷新查看');
-        loadProject();
-      } else {
-        alert(`❌ 生成失败：${data.error || '未知错误'}`);
-      }
-    } catch (e) {
-      alert('❌ 生成失败，请检查 DOUBAO_API_KEY 是否已配置');
     } finally {
-      setGeneratingImages(false);
+      setRegenLoading(false);
     }
   };
 
-  // 视频重新生成（有视频时调这个函数）
-  const handleRegenVideo = async () => {
-    if (!project?.videos?.[0]) return;
-    if ((project.videos[0].generation_count ?? 0) >= 1) {
-      alert('❌ 视频已达到最大重生次数（1次）');
-      return;
-    }
-    await handleGenerateVideo();
+  const paletteColors: Record<string, string> = {
+    pixar:     'from-blue-400 to-purple-500',
+    chinese:   'from-red-500 to-yellow-500',
+    anime:     'from-pink-400 to-rose-500',
+    watercolor:'from-sky-400 to-teal-400',
+    cyberpunk: 'from-indigo-900 to-purple-900',
   };
+  const colorClass = paletteColors[styleId] ?? paletteColors.pixar;
 
-  // 生成视频（统一的底层函数）
-  const handleGenerateVideo = async () => {
-    if (!project) return;
-    setGeneratingVideo(true);
+  return (
+    <>
+      <div
+        className={`relative rounded-2xl overflow-hidden shadow-lg cursor-pointer group transition-transform hover:scale-105 ${
+          item.status === 'success' ? 'aspect-video' : 'aspect-video'
+        }`}
+        onClick={() => item.status === 'success' && setLightbox(true)}
+      >
+        {/* 渐变背景/图片 */}
+        <div className={`absolute inset-0 bg-gradient-to-br ${colorClass}`}>
+          {item.status === 'success' && item.image_url ? (
+            <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-white/60">
+              {item.status === 'generating' ? (
+                <div className="text-center">
+                  <div className="text-4xl animate-spin mb-2">⏳</div>
+                  <p className="text-sm font-bold">生成中...</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <div className="text-5xl mb-2">🎨</div>
+                  <p className="text-sm font-bold">{item.title}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 分镜序号 */}
+        <div className="absolute top-2 left-2 bg-black/50 text-white text-xs font-bold px-2 py-1 rounded-full">
+          {item.sort_order}
+        </div>
+
+        {/* 分镜标题 */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+          <p className="text-white text-xs font-bold truncate">{item.title}</p>
+        </div>
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <Lightbox
+          item={item}
+          onClose={() => setLightbox(false)}
+          onSave={handleSavePrompt}
+          onRegenerate={handleRegenerate}
+        />
+      )}
+    </>
+  );
+}
+
+// ── 主页面 ────────────────────────────────────────────────
+export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const [project, setProject]       = useState<Project | null>(null);
+  const [loading, setLoading]        = useState(true);
+  const [error, setError]            = useState('');
+  const [projectId, setProjectId]   = useState<string>('');
+
+  // 编辑状态
+  const [editingTitle, setEditingTitle]   = useState('');
+  const [editingStory, setEditingStory]   = useState('');
+  const [savingText, setSavingText]       = useState(false);
+
+  const [editingHero, setEditingHero]     = useState<HeroDesign | null>(null);
+  const [savingHero, setSavingHero]       = useState(false);
+
+  // 视频生成
+  const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [videoError, setVideoError]           = useState('');
+
+  // 轮询 ref
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── 解析 params ────────────────────────────────────────
+  useEffect(() => {
+    params.then(({ id }) => setProjectId(id));
+  }, [params]);
+
+  // ── 加载项目 ───────────────────────────────────────────
+  const loadProject = useCallback(async (id: string) => {
     try {
-      const imageUrls = (project.images || [])
-        .sort((a: any, b: any) => a.order_index - b.order_index)
-        .map((img: any) => img.url)
-        .filter(Boolean);
-      const res = await fetch('/api/generate-video', {
-        method: 'POST',
+      const res  = await fetch(`/api/projects/${id}`);
+      const data = await res.json();
+      if (!data.success) { setError(data.error); return; }
+
+      const p: Project = data.data.project;
+
+      // 规范化字段（兼容旧表结构）
+      if (!p.hero_designs && (p as any).hero_design) {
+        try {
+          p.hero_designs = typeof (p as any).hero_design === 'string'
+            ? JSON.parse((p as any).hero_design)
+            : (p as any).hero_design;
+        } catch { p.hero_designs = null; }
+      }
+      if (!p.storyboard_items && (p as any).storyboard) {
+        try {
+          p.storyboard_items = typeof (p as any).storyboard === 'string'
+            ? JSON.parse((p as any).storyboard)
+            : (p as any).storyboard;
+        } catch { p.storyboard_items = []; }
+      }
+      if (!p.videos) p.videos = [];
+
+      // 如果 storyboard_items 为空（从旧结构迁入），生成默认 9 条
+      if (!p.storyboard_items || p.storyboard_items.length === 0) {
+        p.storyboard_items = Array.from({ length: 9 }, (_, i) => ({
+          id:          `placeholder-${i}`,
+          sort_order:  i + 1,
+          title:       ['英雄原本生活','问题出现','接受任务','遇到困难','获得帮助','开始成长','真相浮现','最终挑战','英雄归来'][i],
+          description: '',
+          prompt:      '',
+          image_url:   null,
+          status:      'pending',
+        }));
+      }
+
+      setProject(p);
+      setEditingTitle(p.title ?? '');
+      setEditingStory(p.story ?? '');
+      setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!projectId) return;
+    loadProject(projectId);
+
+    // 状态非终态时轮询
+    const pendingStatuses = ['drafting', 'story_done', 'storyboard_done', 'video_done'];
+    pollingRef.current = setInterval(() => {
+      if (project && !pendingStatuses.includes(project.status)) return;
+      loadProject(projectId);
+    }, 5000);
+
+    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+  }, [projectId, loadProject, project?.status]);
+
+  // ── 保存标题/故事 ──────────────────────────────────────
+  const saveText = async () => {
+    setSavingText(true);
+    try {
+      const res  = await fetch(`/api/projects/${projectId}`, {
+        method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, imageUrls, style: project.style }),
+        body:    JSON.stringify({ title: editingTitle, story: editingStory }),
       });
       const data = await res.json();
       if (data.success) {
-        alert('✅ 视频生成中，请稍后刷新查看');
-        loadProject();
-      } else {
-        alert(`❌ 生成失败：${data.error || '未知错误'}`);
+        setProject((p) => p ? { ...p, title: editingTitle, story: editingStory } : p);
       }
-    } catch (e) {
-      alert('❌ 生成失败，请检查 DOUBAO_API_KEY 是否已配置');
+    } finally {
+      setSavingText(false);
+    }
+  };
+
+  // ── 保存角色设定 ───────────────────────────────────────
+  const saveHero = async () => {
+    if (!editingHero) return;
+    setSavingHero(true);
+    try {
+      const res  = await fetch(`/api/projects/${projectId}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ hero_design: editingHero }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProject((p) => p ? { ...p, hero_designs: editingHero } : p);
+      }
+    } finally {
+      setSavingHero(false);
+    }
+  };
+
+  // ── 生成全部九宫格 ─────────────────────────────────────
+  const generateAllImages = async () => {
+    const res  = await fetch('/api/generate-images', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ projectId, style: project?.style_id ?? 'pixar' }),
+    });
+    const data = await res.json();
+    if (!data.success) alert(`❌ 生成失败: ${data.error}`);
+    // 轮询会自更新
+  };
+
+  // ── 生成视频 ───────────────────────────────────────────
+  const generateVideo = async () => {
+    setGeneratingVideo(true);
+    setVideoError('');
+    try {
+      const res  = await fetch('/api/generate-video', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ projectId }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        if (data.needPayment) {
+          setVideoError(`已达免费次数上限，需支付 ¥${data.price}`);
+        } else {
+          setVideoError(data.error ?? '生成失败');
+        }
+      }
     } finally {
       setGeneratingVideo(false);
     }
   };
 
-  // 从 Lightbox 直接重新生成（用当前 prompt）
-  const handleRegenImageDirectly = async (orderIndex: number) => {
-    const image = getImageByIndex(orderIndex);
-    if (!image || (image.regeneration_count ?? 0) >= 1) {
-      alert('该图片已达到最大重生次数（1次）');
-      return;
-    }
-    try {
-      const res = await fetch('/api/regenerate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project?.id, orderIndex, prompt: image.prompt }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('✅ 重新生成中，请稍后刷新查看');
-        setLightboxIndex(null);
-        loadProject();
-      } else {
-        alert(`❌ ${data.error || '重新生成失败'}`);
-      }
-    } catch (e) {
-      alert('❌ 重新生成失败');
-    }
+  // ── 分镜更新回调 ───────────────────────────────────────
+  const handleStoryboardUpdated = (updated: StoryboardItem) => {
+    setProject((p) =>
+      p
+        ? {
+            ...p,
+            storyboard_items: p.storyboard_items.map((s) =>
+              s.id === updated.id ? updated : s
+            ),
+          }
+        : p
+    );
   };
 
-  // 在 Lightbox 中修改 Prompt 后重新生成
-  const handleRegenFromLightboxWithPrompt = async () => {
-    const newPrompt = promptInput.trim();
-    if (!newPrompt) { alert('请输入 Prompt'); return; }
-    const image = getImageByIndex(lightboxIndex!);
-    if (!image) return;
-    try {
-      const res = await fetch('/api/regenerate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project?.id, orderIndex: image.order_index, prompt: newPrompt }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('✅ 重新生成中，请稍后刷新查看');
-        setLightboxIndex(null);
-        setEditingPromptIndex(null);
-        setPromptInput('');
-        loadProject();
-      } else {
-        alert(`❌ ${data.error || '重新生成失败'}`);
-      }
-    } catch (e) {
-      alert('❌ 重新生成失败');
-    }
+  // ── 渲染 ──────────────────────────────────────────────
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
+      <div className="text-6xl animate-bounce mb-4">🎬</div>
+      <p className="text-2xl text-purple-600 font-bold">加载中...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100 p-8">
+      <div className="text-6xl mb-4">😢</div>
+      <p className="text-2xl text-red-600 font-bold mb-6">{error}</p>
+      <Link href="/" className="px-8 py-4 bg-purple-500 text-white rounded-3xl font-bold text-xl hover:bg-purple-600 transition-colors">← 返回首页</Link>
+    </div>
+  );
+
+  if (!project) return null;
+
+  const statusLabels: Record<string, string> = {
+    drafting:         '📝 故事生成中',
+    story_done:       '✅ 故事完成',
+    storyboard_done:  '✅ 分镜图完成',
+    video_done:       '🎬 视频完成',
+    failed:           '❌ 失败',
   };
 
-  // 键盘关闭 lightbox
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightboxIndex(null);
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
-        <div className="text-6xl animate-bounce">⏳</div>
-        <div className="text-3xl text-purple-600 ml-4">加载中...</div>
-      </div>
-    );
-  }
-
-  if (!project) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
-        <div className="text-3xl text-red-600">❌ 项目不存在</div>
-      </div>
-    );
-  }
+  const completedCount = project.storyboard_items.filter((s) => s.status === 'success').length;
+  const allImagesDone  = completedCount === 9;
+  const video          = project.videos?.[0];
+  const canGenerateVideo = allImagesDone && !video?.url;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* 标题 */}
-        <h1 className="text-3xl md:text-5xl font-bold text-center text-purple-600 mb-6 md:mb-12">
-          🎬 我的动画作品
-        </h1>
+      <div className="max-w-6xl mx-auto space-y-8">
 
-        <div className="bg-white rounded-3xl shadow-2xl p-4 md:p-12">
-          {/* ===== 作品标题（可编辑）===== */}
-          <div className="mb-8 md:mb-12">
-            {editingTitle ? (
-              <div className="flex items-center gap-2 md:gap-4 flex-wrap">
+        {/* ── 顶部导航 ────────────────────────────────── */}
+        <div className="flex items-center justify-between">
+          <Link href="/my-works" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-purple-700 hover:bg-white transition-colors shadow">
+            ← 我的作品
+          </Link>
+          <div className="text-center">
+            <h1 className="text-2xl md:text-3xl font-bold text-purple-700">
+              {project.title || '创意动画项目'}
+            </h1>
+            <p className="text-purple-500 text-sm">
+              👧 {project.child_name} · {STYLE_NAMES[project.style_id] ?? project.style_id}
+            </p>
+          </div>
+          <span className="px-4 py-2 bg-white/60 backdrop-blur rounded-full text-sm font-bold text-purple-600 shadow">
+            {statusLabels[project.status] ?? project.status}
+          </span>
+        </div>
+
+        {/* ── 区域 1：故事区域 ──────────────────────────── */}
+        <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            📖 故事
+          </h2>
+
+          {/* 小朋友名字（只读） */}
+          <div className="mb-4 flex items-center gap-2 text-gray-500 text-sm">
+            <span>👧</span>
+            <span className="font-bold">{project.child_name}</span>
+            <span className="text-xs bg-gray-100 px-2 py-1 rounded-full">只读</span>
+          </div>
+
+          {/* 故事标题 */}
+          <div className="mb-4">
+            <label className="block text-sm font-bold text-gray-600 mb-1">故事标题</label>
+            <input
+              type="text"
+              value={editingTitle}
+              onChange={(e) => setEditingTitle(e.target.value)}
+              className="w-full border-2 border-purple-200 rounded-xl px-4 py-3 text-xl font-bold focus:border-purple-500 focus:outline-none transition-colors"
+            />
+          </div>
+
+          {/* 故事正文 */}
+          <div className="mb-4">
+            <label className="block text-sm font-bold text-gray-600 mb-1">故事正文</label>
+            <textarea
+              value={editingStory}
+              onChange={(e) => setEditingStory(e.target.value)}
+              rows={6}
+              className="w-full border-2 border-purple-200 rounded-xl px-4 py-3 text-base leading-relaxed focus:border-purple-500 focus:outline-none transition-colors resize-y"
+            />
+          </div>
+
+          <button
+            onClick={saveText}
+            disabled={savingText}
+            className="px-8 py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
+          >
+            {savingText ? '💾 保存中...' : '💾 保存'}
+          </button>
+        </section>
+
+        {/* ── 区域 2：角色设定 ──────────────────────────── */}
+        <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            🦸 角色设定
+          </h2>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            {([
+              { key: 'name',    label: '角色名' },
+              { key: 'species', label: '物种' },
+              { key: 'color',  label: '主色' },
+              { key: 'costume', label: '服装' },
+              { key: 'prop',   label: '道具' },
+            ] as const).map(({ key, label }) => (
+              <div key={key}>
+                <label className="block text-xs font-bold text-gray-500 mb-1">{label}</label>
                 <input
                   type="text"
-                  value={titleInput}
-                  onChange={(e) => setTitleInput(e.target.value)}
-                  className="text-xl md:text-3xl font-bold text-gray-800 border-3 border-purple-400 rounded-2xl px-4 md:px-6 py-2 md:py-3 flex-1 min-w-0"
-                  placeholder="给作品起个名字吧"
-                  onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
-                  autoFocus
+                  value={(editingHero ?? {})[key] ?? ''}
+                  onChange={(e) =>
+                    setEditingHero((h) => h ? { ...h, [key]: e.target.value } : h)
+                  }
+                  className="w-full border-2 border-purple-200 rounded-xl px-3 py-2 text-sm focus:border-purple-500 focus:outline-none transition-colors"
                 />
-                <KidButton onClick={saveTitle} className="bg-green-500 text-white px-3 md:px-6 py-2 md:py-3 text-sm md:text-base">
-                  ✅ 保存
-                </KidButton>
-                <KidButton onClick={() => setEditingTitle(false)} className="bg-gray-400 text-white px-3 md:px-6 py-2 md:py-3 text-sm md:text-base">
-                  取消
-                </KidButton>
               </div>
-            ) : (
-              <div className="flex items-center gap-2 md:gap-4 flex-wrap">
-                <h2
-                  className="text-2xl md:text-3xl font-bold text-gray-800 cursor-pointer hover:text-purple-600 transition-colors flex-1 min-w-0"
-                  onClick={() => { setTitleInput(project.title || ''); setEditingTitle(true); }}
-                >
-                  ✏️ {project.title || '未命名作品（点击编辑）'}
-                </h2>
-                <span className="px-3 md:px-4 py-1 md:py-2 bg-purple-200 text-purple-800 rounded-full font-bold text-sm md:text-base whitespace-nowrap">
-                  {getStyleName(project.style)}
-                </span>
-              </div>
-            )}
-            {/* 显示小朋友名字 */}
-            {(childName && childName !== '小朋友') || (project as any)?.child_name ? (
-              <p className="text-purple-600 font-bold text-base md:text-lg mt-2">
-                👧 {childName || (project as any).child_name}
-              </p>
-            ) : null}
-            <p className="text-gray-500 mt-2 text-sm md:text-base">
-              创建于 {formatDateTime(project.created_at)}
-            </p>
+            ))}
           </div>
 
-          {/* ===== AI 故事大纲（可编辑）===== */}
-          <div className="mb-8 md:mb-12">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl md:text-2xl font-bold text-gray-800">
-                📖 AI 故事大纲
-              </h3>
-              {!editingStory && (
-                <KidButton
-                  onClick={() => { setStoryInput(storyData.story); setEditingStory(true); }}
-                  className="bg-yellow-400 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base"
-                >
-                  ✏️ 编辑故事
-                </KidButton>
-              )}
+          <button
+            onClick={saveHero}
+            disabled={savingHero}
+            className="px-8 py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
+          >
+            {savingHero ? '💾 保存中...' : '💾 保存角色设定'}
+          </button>
+        </section>
+
+        {/* ── 区域 3：九宫格 ─────────────────────────────── */}
+        <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-2">
+              🎞️ 九宫格分镜
+            </h2>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500 font-bold">
+                {completedCount}/9 张
+              </span>
+              <button
+                onClick={generateAllImages}
+                disabled={!allImagesDone || project.status === 'storyboard_done'}
+                className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-2xl font-bold hover:from-pink-600 hover:to-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm md:text-base shadow-lg"
+              >
+                🚀 一键出分镜图
+              </button>
             </div>
-
-            {editingStory ? (
-              <div>
-                <textarea
-                  value={storyInput}
-                  onChange={(e) => setStoryInput(e.target.value)}
-                  className="w-full h-48 md:h-64 border-3 border-yellow-400 rounded-2xl p-4 md:p-6 text-base md:text-lg leading-relaxed resize-none focus:outline-none focus:border-yellow-500"
-                  placeholder="在这里编写你的故事..."
-                  autoFocus
-                />
-                <div className="flex justify-end gap-2 md:gap-3 mt-3 md:mt-4">
-                  <KidButton onClick={() => setEditingStory(false)} className="bg-gray-400 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base">
-                    取消
-                  </KidButton>
-                  <KidButton onClick={saveStory} className="bg-green-500 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base">
-                    ✅ 保存故事
-                  </KidButton>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-yellow-50 rounded-2xl p-4 md:p-6 text-base md:text-lg leading-relaxed whitespace-pre-wrap">
-                {storyData.story}
-              </div>
-            )}
           </div>
 
-          {/* ===== 角色设定（显示 hero_design）===== */}
-          {storyData.hero_design && (
-            <div className="mb-8 md:mb-12 bg-purple-50 rounded-2xl p-4 md:p-6">
-              <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-3 md:mb-4">
-                🎭 角色设定
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 text-sm md:text-base">
-                <div><span className="font-bold">名字：</span>{storyData.hero_design.name}</div>
-                <div><span className="font-bold">物种：</span>{storyData.hero_design.species}</div>
-                <div><span className="font-bold">颜色：</span>{storyData.hero_design.fur_color}</div>
-                <div><span className="font-bold">服装：</span>{storyData.hero_design.clothes}</div>
-                {storyData.hero_design.item && (
-                  <div className="col-span-2 md:col-span-4"><span className="font-bold">道具：</span>{storyData.hero_design.item}</div>
+          {/* 3x3 网格 */}
+          <div className="grid grid-cols-3 gap-3 md:gap-5">
+            {project.storyboard_items
+              .slice(0, 9)
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map((item) => (
+                <StoryboardCard
+                  key={item.id}
+                  item={item}
+                  styleId={project.style_id}
+                  projectId={project.id}
+                  onUpdated={handleStoryboardUpdated}
+                />
+              ))}
+          </div>
+
+          <p className="text-xs text-gray-400 mt-4 text-center">
+            💡 点击已生成的分镜图可编辑 Prompt 并重新生成
+          </p>
+        </section>
+
+        {/* ── 区域 4：动画视频 ───────────────────────────── */}
+        <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-2">
+              🎬 动画视频
+            </h2>
+            <button
+              onClick={generateVideo}
+              disabled={generatingVideo || !canGenerateVideo}
+              className="px-6 py-3 bg-gradient-to-r from-green-400 to-teal-400 text-white rounded-2xl font-bold hover:from-green-500 hover:to-teal-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm md:text-base shadow-lg"
+            >
+              {generatingVideo ? '⏳ 生成中...' : video?.status === 'processing' ? '🎬 生成中...' : '🎬 生成视频'}
+            </button>
+          </div>
+
+          {/* 视频播放器 / 占位 */}
+          <div className="aspect-video bg-gray-100 rounded-2xl overflow-hidden flex items-center justify-center">
+            {video?.status === 'processing' || generatingVideo ? (
+              <div className="text-center">
+                <div className="text-6xl animate-bounce mb-4">🎬</div>
+                <p className="text-xl text-gray-600 font-bold">视频生成中，请稍候...</p>
+                <p className="text-sm text-gray-400 mt-2">通常需要 2-5 分钟</p>
+              </div>
+            ) : video?.url ? (
+              <video
+                src={video.url}
+                controls
+                className="w-full h-full object-contain"
+                poster={project.storyboard_items[0]?.image_url ?? undefined}
+              />
+            ) : (
+              <div className="text-center text-gray-400">
+                <div className="text-6xl mb-4">🎬</div>
+                <p className="text-lg font-bold">
+                  {canGenerateVideo ? '九宫格生成完毕，可以生成视频啦！' : '请先生成九宫格分镜图'}
+                </p>
+                {videoError && (
+                  <p className="text-red-500 mt-2 font-bold">{videoError}</p>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* ===== 九宫格分镜图（16:9）===== */}
-          <div className="mb-8 md:mb-12">
-            <div className="flex items-center justify-between mb-4 md:mb-6">
-              <h3 className="text-xl md:text-2xl font-bold text-gray-800">
-                🎨 九宫格分镜
-              </h3>
-              <KidButton
-                onClick={handleGenerateAllImages}
-                disabled={generatingImages}
-                className="bg-purple-500 hover:bg-purple-600 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base disabled:opacity-50"
-              >
-                {generatingImages ? '⏳ 生成中...' : '🎨 一键出分镜图'}
-              </KidButton>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 md:gap-4">
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => {
-                const image = getImageByIndex(index);
-                const hasImage = image && image.url;
-                const displaySrc = hasImage ? image!.url! : PLACEHOLDER_SVG;
-                const sceneTitle = image?.scene_title || storyData.storyboard?.[index]?.title || `分镜 ${index + 1}`;
-
-                return (
-                  <div key={index} className="relative group">
-                    <img
-                      src={displaySrc}
-                      alt={sceneTitle}
-                      className={`w-full aspect-video rounded-2xl shadow-lg object-cover cursor-pointer hover:scale-[1.02] transition-transform ${hasImage ? '' : 'opacity-60'}`}
-                      onClick={() => setLightboxIndex(index)}
-                    />
-                    {/* 悬浮操作按钮（仅已生成图片显示） */}
-                    {hasImage && (
-                      <div className="absolute top-1 right-1 md:top-2 md:right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleRegenImage(image!.id, index); }}
-                          className="bg-orange-400 text-white rounded-full w-7 h-7 md:w-10 md:h-10 flex items-center justify-center text-sm md:text-lg shadow-lg"
-                          title="重新生成这张图"
-                        >
-                          🔄
-                        </button>
-                      </div>
-                    )}
-                    {/* 未生成时显示"等待生成"遮罩 */}
-                    {!hasImage && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <span className="text-xs md:text-sm text-gray-400 bg-white/70 rounded-full px-2 py-0.5">
-                          等待生成
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ===== 动画视频 ===== */}
-          <div className="mb-8 md:mb-12">
-            <div className="flex items-center justify-between mb-4 md:mb-6">
-              <h3 className="text-xl md:text-2xl font-bold text-gray-800">
-                🎬 动画视频
-              </h3>
-              {!(project.videos?.length > 0 && project.videos[0].url) && (
-                <KidButton
-                  onClick={handleGenerateVideo}
-                  disabled={generatingVideo}
-                  className="bg-orange-400 hover:bg-orange-500 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base disabled:opacity-50"
-                >
-                  {generatingVideo ? '⏳ 生成中...' : '🎬 生成视频'}
-                </KidButton>
-              )}
-              {project.videos?.length > 0 && project.videos[0].url && (project.videos[0].generation_count ?? 0) < 1 && (
-                <KidButton
-                  onClick={handleRegenVideo}
-                  disabled={generatingVideo}
-                  className="bg-orange-400 hover:bg-orange-500 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base disabled:opacity-50"
-                >
-                  {generatingVideo ? '⏳ 生成中...' : '🔄 重新生成视频'}
-                </KidButton>
-              )}
-            </div>
-
-            {project.videos?.length > 0 && project.videos[0].url ? (
-              <div className="relative">
-                <video
-                  src={project.videos[0].url}
-                  controls
-                  className="w-full rounded-2xl shadow-lg"
-                />
-                <div className="mt-3 md:mt-4 flex items-center justify-between">
-                  <span className="text-gray-600 text-sm">
-                    已生成 · 剩余重生机会：{1 - (project.videos[0].generation_count ?? 0)}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              /* 空位占位 */
-              <div className="w-full aspect-video rounded-2xl bg-gray-100 border-3 border-dashed border-gray-300 flex flex-col items-center justify-center">
-                <div className="text-4xl md:text-7xl mb-2 md:mb-3 opacity-30">🎬</div>
-                <span className="text-base md:text-xl text-gray-400">动画视频位置</span>
-                <span className="text-xs md:text-sm text-gray-300 mt-1 md:mt-2">等待 AI 生成</span>
-              </div>
             )}
           </div>
 
-          {/* ===== 操作按钮 ===== */}
-          <div className="flex justify-center space-x-4 md:space-x-6">
-            <KidButton
-              onClick={() => router.push('/upload')}
-              className="bg-gradient-to-r from-green-400 to-blue-400 text-white px-4 md:px-8 py-2 md:py-4 text-base md:text-xl"
-            >
-              🎨 创作新作品
-            </KidButton>
-            <KidButton
-              onClick={() => router.push('/my-works')}
-              className="bg-gray-400 text-white px-4 md:px-8 py-2 md:py-4 text-base md:text-xl"
-            >
-              📺 返回作品列表
-            </KidButton>
-          </div>
-        </div>
+          {/* 免费次数提示 */}
+          {!video && !generatingVideo && (
+            <p className="text-xs text-gray-400 mt-3 text-center">
+              🎁 每项目免费生成 1 次视频，后续需支付 ¥9.9（本期仅预留接口）
+            </p>
+          )}
+          {video?.url && (
+            <div className="mt-4 text-center">
+              <a
+                href={video.url}
+                download={`${project.title ?? '动画'}.mp4`}
+                className="px-8 py-3 bg-green-500 text-white rounded-2xl font-bold hover:bg-green-600 transition-colors"
+              >
+                ⬇️ 下载视频
+              </a>
+            </div>
+          )}
+        </section>
+
       </div>
-
-      {/* ===== Lightbox 放大查看 ===== */}
-      {lightboxIndex !== null && (
-        <div
-          ref={lightboxRef}
-          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-2 md:p-8 cursor-pointer"
-          onClick={() => setLightboxIndex(null)}
-        >
-          {/* 大图 */}
-          <img
-            src={getImageByIndex(lightboxIndex)?.url || PLACEHOLDER_SVG}
-            alt={`分镜 ${lightboxIndex + 1}`}
-            className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-
-          {/* 关闭按钮 */}
-          <button
-            onClick={() => setLightboxIndex(null)}
-            className="fixed top-4 right-4 md:top-6 md:right-6 text-white text-3xl md:text-4xl z-50 hover:scale-110 transition-transform"
-          >
-            ✕
-          </button>
-
-          {/* 底部信息 + 操作按钮 */}
-          <div className="fixed bottom-2 md:bottom-6 left-0 right-0 text-white text-center px-2 md:px-4 z-50">
-            <p className="text-sm md:text-base font-bold mb-2">
-              分镜 {lightboxIndex + 1}：{getImageByIndex(lightboxIndex)?.scene_title || ''}
-            </p>
-            {/* 显示当前 Prompt */}
-            <p className="text-xs md:text-sm text-gray-300 mb-2 max-w-2xl mx-auto truncate">
-              Prompt: {getImageByIndex(lightboxIndex)?.prompt || '（暂无 Prompt）'}
-            </p>
-            <div className="flex justify-center gap-2 flex-wrap">
-              {/* 已生成图片：显示下载按钮 */}
-              {getImageByIndex(lightboxIndex)?.url && (
-                <button
-                  onClick={() => {
-                    const img = getImageByIndex(lightboxIndex);
-                    if (img?.url) handleDownloadImage(img.url!, lightboxIndex);
-                  }}
-                  className="bg-blue-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-blue-600 transition-colors"
-                  disabled={downloadingIndex === lightboxIndex}
-                >
-                  {downloadingIndex === lightboxIndex ? '⏳' : '⬇️ 下载'}
-                </button>
-              )}
-              {/* 修改 Prompt 按钮（打开编辑弹窗） */}
-              <button
-                onClick={() => {
-                  setPromptInput(getImageByIndex(lightboxIndex)?.prompt || '');
-                  setEditingPromptIndex(lightboxIndex);
-                  setLightboxIndex(null);
-                }}
-                className="bg-purple-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-purple-600 transition-colors"
-              >
-                ✏️ 改Prompt
-              </button>
-              {/* 重新生成按钮（仅未满次数时） */}
-              {(getImageByIndex(lightboxIndex)?.regeneration_count ?? 0) < 1 && (
-                <button
-                  onClick={() => handleRegenImageDirectly(lightboxIndex)}
-                  className="bg-orange-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-orange-600 transition-colors"
-                >
-                  🔄 重生成
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 左右切换 */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setLightboxIndex(Math.max(0, lightboxIndex - 1)); }}
-            className="fixed left-2 md:left-6 top-1/2 -translate-y-1/2 text-white text-3xl md:text-5xl z-50 hover:scale-110 transition-transform"
-            disabled={lightboxIndex === 0}
-          >
-            ‹
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); setLightboxIndex(Math.min(8, lightboxIndex + 1)); }}
-            className="fixed right-2 md:right-6 top-1/2 -translate-y-1/2 text-white text-3xl md:text-5xl z-50 hover:scale-110 transition-transform"
-            disabled={lightboxIndex === 8}
-          >
-            ›
-          </button>
-        </div>
-      )}
-
-      {/* ===== Prompt 编辑弹窗 ===== */}
-      {editingPromptIndex !== null && (
-        <div
-          className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
-          onClick={(e) => e.target === e.currentTarget && setEditingPromptIndex(null)}
-        >
-          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl md:text-2xl font-bold mb-4">
-              ✏️ 编辑分镜 {editingPromptIndex + 1} 的 Prompt
-            </h3>
-            <textarea
-              value={promptInput}
-              onChange={e => setPromptInput(e.target.value)}
-              className="w-full h-32 md:h-40 border-2 border-purple-300 rounded-2xl p-3 md:p-4 text-sm md:text-base focus:outline-none focus:border-purple-500 resize-none"
-              placeholder="修改 Prompt 后重新生成这张图..."
-              autoFocus
-            />
-            <div className="flex justify-end gap-2 md:gap-3 mt-3 md:mt-4">
-              <KidButton onClick={() => setEditingPromptIndex(null)} className="bg-gray-400 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base">
-                取消
-              </KidButton>
-              <KidButton
-                onClick={() => {
-                  const img = getImageByIndex(editingPromptIndex);
-                  if (img) handleRegenImageWithPrompt(img.id, editingPromptIndex);
-                }}
-                className="bg-purple-500 text-white px-4 md:px-6 py-1 md:py-2 text-sm md:text-base"
-              >
-                🔄 重新生成
-              </KidButton>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-}
-
-function getStyleName(style: string): string {
-  const styleMap: Record<string, string> = {
-    pixar: '🎬 Pixar 3D',
-    guofeng: '🏮 国风',
-    anime: '🌸 二次元',
-    watercolor: '🎨 水彩',
-    cyberpunk: '🌃 赛博朋克',
-  };
-  return styleMap[style] || style;
 }

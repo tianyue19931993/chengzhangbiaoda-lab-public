@@ -2,33 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { generateImage } from '@/lib/doubao-api';
 import { downloadImageToBuffer } from '@/lib/storage-helper';
+import { buildStoryboardImagePrompt } from '@/prompts';
 
-/**
- * 生成默认占位 SVG 图片（纯文本 SVG，无外部依赖）
- * 返回 SVG 字符串，可直接上传到 Supabase Storage
- */
-function generatePlaceholderSVG(sceneNumber: number, sceneTitle: string, style: string): string {
-  const colors: Record<string, { bg: string; fg: string }> = {
-    pixar:     { bg: '#1a73e8', fg: '#ffffff' },
-    guofeng:   { bg: '#8B0000', fg: '#FFD700' },
-    anime:     { bg: '#FF69B4', fg: '#ffffff' },
-    watercolor:{ bg: '#4A90D9', fg: '#ffffff' },
-    cyberpunk: { bg: '#0D0D0D', fg: '#00FFFF' },
+/** 生成 SVG 占位图（API Key 未配置时降级使用） */
+function generatePlaceholderSVG(sceneNumber: number, sceneTitle: string, style: string): Buffer {
+  const palettes: Record<string, { bg: string; fg: string; emoji: string }> = {
+    pixar:     { bg: '#1a73e8', fg: '#ffffff', emoji: '⭐' },
+    chinese:   { bg: '#7b1d1d', fg: '#FFD700', emoji: '🏮' },
+    anime:     { bg: '#e91e8c', fg: '#ffffff', emoji: '🌸' },
+    watercolor:{ bg: '#1565c0', fg: '#ffffff', emoji: '🎨' },
+    cyberpunk: { bg: '#0d0d0d', fg: '#00e5ff', emoji: '🌃' },
   };
-  const c = colors[style] || colors.pixar;
+  const p = palettes[style] ?? palettes.pixar;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-    <rect width="1280" height="720" fill="${c.bg}"/>
-    <text x="640" y="300" text-anchor="middle" font-size="120" fill="${c.fg}" font-family="Arial,sans-serif" font-weight="bold">${sceneNumber}</text>
-    <text x="640" y="450" text-anchor="middle" font-size="48" fill="${c.fg}" font-family="Arial,sans-serif">${sceneTitle || '分镜 ' + sceneNumber}</text>
-    <text x="640" y="550" text-anchor="middle" font-size="36" fill="${c.fg}" font-family="Arial,sans-serif" opacity="0.7">（示例图 - 请配置 DOUBAO_API_KEY 生成真实图片）</text>
-  </svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+  <rect width="1280" height="720" fill="${p.bg}"/>
+  <text x="640" y="280" text-anchor="middle" font-size="160" fill="${p.fg}" font-family="Arial,sans-serif" font-weight="bold">${sceneNumber}</text>
+  <text x="640" y="440" text-anchor="middle" font-size="56" fill="${p.fg}" font-family="Arial,sans-serif">${sceneTitle}</text>
+  <text x="640" y="540" text-anchor="middle" font-size="32" fill="${p.fg}" font-family="Arial,sans-serif" opacity="0.6">（配置 DOUBAO_API_KEY 后生成真实图片）</text>
+</svg>`;
+  return Buffer.from(svg, 'utf-8');
 }
 
 /**
  * POST /api/generate-images
- * 从 images 表读取已保存的 prompts，逐张生成 9 张分镜图
- * 无 API Key 时降级：生成 SVG 占位图上传到 Supabase Storage，流程不中断
+ *
+ * 按顺序逐张生成 9 张分镜图，写入 storyboard_items 表
+ * API Key 未配置时：生成 SVG 占位图
  */
 export async function POST(request: NextRequest) {
   try {
@@ -36,77 +36,91 @@ export async function POST(request: NextRequest) {
     if (!projectId)
       return NextResponse.json({ success: false, error: '缺少 projectId' }, { status: 400 });
 
-    console.log(`🎨 generate-images 开始 | project=${projectId}`);
+    console.log(`🎨 generate-images | project=${projectId}`);
 
-    await supabaseAdmin.from('projects').update({ status: 'generating_images' }).eq('id', projectId);
-
-    // 从 images 表读取 prompts
-    const { data: imageRows, error: fetchErr } = await supabaseAdmin
-      .from('images')
-      .select('id,order_index,prompt,scene_title')
+    // ── 获取 hero_design（用于角色一致性） ────────────────
+    const { data: heroRow } = await supabaseAdmin
+      .from('hero_designs')
+      .select('*')
       .eq('project_id', projectId)
-      .order('order_index', { ascending: true });
+      .single();
 
-    if (fetchErr || !imageRows || imageRows.length === 0) {
-      console.error('❌ 无法读取 images 表 prompt:', fetchErr);
-      await supabaseAdmin.from('projects').update({ status: 'failed' }).eq('id', projectId);
-      return NextResponse.json({ success: false, error: '未找到分镜 Prompt，请先生成故事' }, { status: 400 });
+    const heroDesign = heroRow ?? { name: '小星星', species: '小朋友', color: '彩色', costume: '普通衣服' };
+
+    // ── 获取分镜记录 ─────────────────────────────────────
+    const { data: items, error: fetchErr } = await supabaseAdmin
+      .from('storyboard_items')
+      .select('id, sort_order, title, description, prompt')
+      .eq('project_id', projectId)
+      .order('sort_order', { ascending: true });
+
+    if (fetchErr || !items || items.length === 0) {
+      return NextResponse.json({ success: false, error: '未找到分镜记录，请先生成故事' }, { status: 400 });
     }
 
-    console.log(`🎨 共 ${imageRows.length} 条分镜记录，开始逐张生成...`);
+    // 优先使用数据库中的 prompt；若无则动态构建
+    const finalItems = items.map((item) => ({
+      ...item,
+      prompt: item.prompt ?? buildStoryboardImagePrompt(item.title, item.description ?? '', heroDesign, style),
+    }));
+
+    await supabaseAdmin.from('projects').update({ status: 'storyboard_done' }).eq('id', projectId);
 
     const hasKey = !!process.env.DOUBAO_API_KEY;
 
-    for (let i = 0; i < imageRows.length; i++) {
-      const row = imageRows[i];
+    // ── 逐张生成 ──────────────────────────────────────────
+    for (const item of finalItems) {
       try {
-        console.log(`🎨 生成第 ${i + 1}/${imageRows.length} 张...`);
-        let publicUrl: string;
+        // 更新状态为生成中
+        await supabaseAdmin
+          .from('storyboard_items')
+          .update({ status: 'generating' })
+          .eq('id', item.id);
+
+        let imageUrl: string;
 
         if (hasKey) {
-          // 正常模式：调用豆包生图 API
-          const imageUrl = await generateImage(row.prompt);
-          const { buffer, contentType } = await downloadImageToBuffer(imageUrl);
-          const fileName = `${projectId}/image_${i + 1}_${Date.now()}.png`;
+          const rawUrl = await generateImage(item.prompt ?? item.title);
+          const { buffer, contentType } = await downloadImageToBuffer(rawUrl);
+          const fileName = `storyboards/${projectId}/scene_${item.sort_order}_${Date.now()}.png`;
           const { error: upErr } = await supabaseAdmin.storage
             .from('generated-images')
-            .upload(fileName, buffer, { contentType: contentType || 'image/png', upsert: true });
+            .upload(fileName, buffer, { contentType: contentType ?? 'image/png', upsert: true });
           if (upErr) throw upErr;
-          const { data: { publicUrl: u } } = supabaseAdmin.storage
+          const { data: urlData } = supabaseAdmin.storage
             .from('generated-images')
             .getPublicUrl(fileName);
-          publicUrl = u;
+          imageUrl = urlData.publicUrl;
         } else {
-          // 降级模式：生成 SVG 占位图上传
-          console.log(`🟡 无 API Key，使用 SVG 占位图（第 ${i + 1} 张）`);
-          const svgString = generatePlaceholderSVG(i + 1, row.scene_title || `分镜 ${i + 1}`, style);
-          const svgBuffer = Buffer.from(svgString, 'utf-8');
-          const fileName = `${projectId}/placeholder_${i + 1}_${Date.now()}.svg`;
-          const { error: upErr } = await supabaseAdmin.storage
+          // 降级：SVG 占位图
+          const svgBuf = generatePlaceholderSVG(item.sort_order, item.title ?? `分镜 ${item.sort_order}`, style);
+          const fileName = `storyboards/${projectId}/placeholder_${item.sort_order}.svg`;
+          await supabaseAdmin.storage
             .from('generated-images')
-            .upload(fileName, svgBuffer, { contentType: 'image/svg+xml', upsert: true });
-          if (upErr) throw upErr;
-          const { data: { publicUrl: u } } = supabaseAdmin.storage
+            .upload(fileName, svgBuf, { contentType: 'image/svg+xml', upsert: true });
+          const { data: urlData } = supabaseAdmin.storage
             .from('generated-images')
             .getPublicUrl(fileName);
-          publicUrl = u;
+          imageUrl = urlData.publicUrl;
         }
 
         await supabaseAdmin
-          .from('images')
-          .update({ url: publicUrl, status: 'completed' })
-          .eq('id', row.id);
+          .from('storyboard_items')
+          .update({ image_url: imageUrl, status: 'success' })
+          .eq('id', item.id);
 
-        console.log(`✅ 第 ${i + 1} 张完成`);
+        console.log(`✅ 分镜 ${item.sort_order}/9 完成`);
       } catch (err: any) {
-        console.error(`❌ 第 ${i + 1} 张生成失败:`, err.message);
-        // 继续生成其他图，不中断
+        console.error(`❌ 分镜 ${item.sort_order} 失败:`, err.message);
+        await supabaseAdmin
+          .from('storyboard_items')
+          .update({ status: 'failed' })
+          .eq('id', item.id);
       }
     }
 
-    await supabaseAdmin.from('projects').update({ status: 'images_generated' }).eq('id', projectId);
+    await supabaseAdmin.from('projects').update({ status: 'storyboard_done' }).eq('id', projectId);
 
-    console.log(`✅ generate-images 完成 | usedFallback: ${!hasKey}`);
     return NextResponse.json({ success: true, data: { projectId }, usedFallback: !hasKey });
   } catch (err: any) {
     console.error('❌ generate-images 异常:', err);

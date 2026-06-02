@@ -5,82 +5,69 @@ import { downloadImageToBuffer } from '@/lib/storage-helper';
 
 /**
  * POST /api/regenerate-image
- * 用新 Prompt 重新生成单张分镜图
- * Body: { projectId, orderIndex, prompt }
+ *
+ * 用用户自定义 Prompt 重新生成单张分镜图
+ * Body: { projectId, sortOrder, prompt }
  */
 export async function POST(request: NextRequest) {
   try {
-    const { projectId, orderIndex, prompt } = await request.json();
-    if (!projectId) return NextResponse.json({ success: false, error: '缺少 projectId' }, { status: 400 });
-    if (orderIndex === undefined || orderIndex === null) return NextResponse.json({ success: false, error: '缺少 orderIndex' }, { status: 400 });
-    if (!prompt) return NextResponse.json({ success: false, error: '缺少 prompt' }, { status: 400 });
+    const { projectId, sortOrder, prompt } = await request.json();
 
-    console.log(`🔄 重新生成分镜 ${Number(orderIndex) + 1} | project=${projectId}`);
+    if (!projectId)
+      return NextResponse.json({ success: false, error: '缺少 projectId' }, { status: 400 });
+    if (sortOrder === undefined || sortOrder === null)
+      return NextResponse.json({ success: false, error: '缺少 sortOrder' }, { status: 400 });
+    if (!prompt?.trim())
+      return NextResponse.json({ success: false, error: '缺少 prompt' }, { status: 400 });
 
-    // 查现有图片记录
-    const { data: existing, error: findErr } = await supabaseAdmin
-      .from('images')
+    console.log(`🔄 重新生成分镜 ${sortOrder} | project=${projectId}`);
+
+    // ── 查找分镜记录 ─────────────────────────────────────
+    const { data: item, error: findErr } = await supabaseAdmin
+      .from('storyboard_items')
       .select('*')
       .eq('project_id', projectId)
-      .eq('order_index', orderIndex)
+      .eq('sort_order', Number(sortOrder))
       .single();
 
-    if (findErr || !existing) {
-      return NextResponse.json({ success: false, error: '未找到对应的图片记录' }, { status: 404 });
+    if (findErr || !item) {
+      return NextResponse.json({ success: false, error: '未找到对应的分镜记录' }, { status: 404 });
     }
 
-    if ((existing.regeneration_count || 0) >= 1) {
-      return NextResponse.json({ success: false, error: '该图片已达到最大重生次数（1次）' }, { status: 403 });
+    // ── 调用豆包生图 API ─────────────────────────────────
+    if (!process.env.DOUBAO_API_KEY) {
+      return NextResponse.json({ success: false, error: 'DOUBAO_API_KEY 未配置，无法生成图片' }, { status: 503 });
     }
 
-    // 调用豆包生图 API
     const imageUrl = await generateImage(prompt);
-    console.log(`✅ 分镜 ${Number(orderIndex) + 1} 生图成功`);
+    console.log('✅ 分镜生图成功');
 
-    // 下载并上传到 Supabase Storage
+    // ── 下载并上传到 Supabase Storage ─────────────────────
     const { buffer, contentType } = await downloadImageToBuffer(imageUrl);
-    const fileName = `${projectId}/image_${Number(orderIndex) + 1}_regen_${Date.now()}.png`;
+    const fileName = `storyboards/${projectId}/scene_${sortOrder}_regen_${Date.now()}.png`;
     const { error: upErr } = await supabaseAdmin.storage
       .from('generated-images')
-      .upload(fileName, buffer, { contentType: contentType || 'image/png', upsert: true });
+      .upload(fileName, buffer, { contentType: contentType ?? 'image/png', upsert: true });
 
     if (upErr) throw upErr;
 
-    const { data: { publicUrl } } = supabaseAdmin.storage
+    const { data: urlData } = supabaseAdmin.storage
       .from('generated-images')
       .getPublicUrl(fileName);
 
-    // 更新数据库记录
+    // ── 更新数据库 ───────────────────────────────────────
     const { error: updateErr } = await supabaseAdmin
-      .from('images')
-      .update({
-        url:                 publicUrl,
-        prompt:              prompt,
-        regeneration_count:  (existing.regeneration_count || 0) + 1,
-      })
-      .eq('id', existing.id);
+      .from('storyboard_items')
+      .update({ prompt: prompt.trim(), image_url: urlData.publicUrl, status: 'success' })
+      .eq('id', item.id);
 
     if (updateErr) throw updateErr;
 
-    console.log(`✅ 分镜 ${Number(orderIndex) + 1} 重生完成`);
+    console.log(`✅ 分镜 ${sortOrder} 重新生成完成`);
 
-    // 检查是否所有 9 张图都生成完了，若是则更新项目状态
-    const { count } = await supabaseAdmin
-      .from('images')
-      .select('*', { count: 'exact', head: true })
-      .eq('project_id', projectId)
-      .not('url', 'is', null);
-
-    if (count === 9) {
-      await supabaseAdmin
-        .from('projects')
-        .update({ status: 'images_generated' })
-        .eq('id', projectId);
-    }
-
-    return NextResponse.json({ success: true, data: { url: publicUrl, orderIndex } });
+    return NextResponse.json({ success: true, data: { url: urlData.publicUrl, sortOrder } });
   } catch (err: any) {
-    console.error('❌ 单图重生失败:', err);
+    console.error('❌ regenerate-image 失败:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

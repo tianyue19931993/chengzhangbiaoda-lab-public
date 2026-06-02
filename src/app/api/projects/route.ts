@@ -1,125 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
-// 获取项目列表
+// GET  /api/projects?userId=xxx → 项目列表
+// POST /api/projects          → 创建项目
+
 export async function GET(request: NextRequest) {
   try {
-    console.log('📋 获取项目列表...');
-    
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
-    const status = searchParams.get('status');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const offset = parseInt(searchParams.get('offset') || '0');
-    
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: '未提供用户 ID' },
-        { status: 400 }
-      );
-    }
-    
-    console.log(`👤 用户 ID: ${userId}`);
-    console.log(`📊 限制: ${limit}, 偏移: ${offset}`);
-    
-    // 构建查询
-    let query = supabaseAdmin
+    const limit  = parseInt(searchParams.get('limit')  ?? '20');
+    const offset = parseInt(searchParams.get('offset') ?? '0');
+
+    if (!userId) return NextResponse.json({ success: false, error: '缺少 userId' }, { status: 400 });
+
+    const { data: projects, error, count } = await supabaseAdmin
       .from('projects')
       .select(`
         *,
-        users (name),
-        images (*),
-        videos (*)
-      `)
+        storyboard_items(id, image_url, sort_order),
+        videos(id, url, status)
+      `, { count: 'exact' })
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
-    
-    if (status) {
-      query = query.eq('status', status);
-    }
-    
-    const { data: projects, error, count } = await query;
-    
-    if (error) {
-      console.error('❌ 查询项目失败:', error);
-      return NextResponse.json(
-        { success: false, error: `查询失败: ${error.message}` },
-        { status: 500 }
-      );
-    }
-    
-    console.log(`✅ 找到 ${projects?.length || 0} 个项目`);
-    
+
+    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+
     return NextResponse.json({
       success: true,
-      data: {
-        projects: projects || [],
-        total: count || 0,
-        limit,
-        offset,
-      },
+      data:   { projects: projects ?? [], total: count ?? 0, limit, offset },
     });
-  } catch (error: any) {
-    console.error('❌ 获取项目列表出错:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// 创建新项目
 export async function POST(request: NextRequest) {
   try {
-    console.log('📝 创建新项目...');
-    
-    const body = await request.json();
-    const { userId, title, style = 'pixar' } = body;
-    
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: '未提供用户 ID' },
-        { status: 400 }
-      );
-    }
-    
-    console.log(`👤 用户 ID: ${userId}`);
-    console.log(`📺 标题: ${title || '(未命名)'}`);
-    console.log(`🎨 风格: ${style}`);
-    
+    const { userId, childName, styleId } = await request.json();
+    if (!userId) return NextResponse.json({ success: false, error: '缺少 userId' }, { status: 400 });
+
     const { data: project, error } = await supabaseAdmin
       .from('projects')
       .insert({
-        user_id: userId,
-        title: title || null,
-        style: style,
-        status: 'uploading',
+        user_id:    userId,
+        child_name: childName ?? '小朋友',
+        style_id:   styleId   ?? 'pixar',
+        status:     'drafting',
       })
       .select()
       .single();
-    
-    if (error) {
-      console.error('❌ 创建项目失败:', error);
-      return NextResponse.json(
-        { success: false, error: `创建失败: ${error.message}` },
-        { status: 500 }
-      );
-    }
-    
-    console.log(`✅ 项目创建成功: ${project.id}`);
-    
-    return NextResponse.json({
-      success: true,
-      data: {
-        project,
-      },
-    });
-  } catch (error: any) {
-    console.error('❌ 创建项目出错:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+
+    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, data: { project } });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

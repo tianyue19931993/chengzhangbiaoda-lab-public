@@ -1,139 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
-// 获取项目详情
+// GET  /api/projects/[id]  → 项目详情
+// PATCH /api/projects/[id]  → 更新项目
+// DELETE /api/projects/[id] → 删除项目
+
 export async function GET(
-  request: NextRequest,
-  props: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const params = await props.params;
-    const projectId = params.id;
-    console.log(`📺 获取项目详情: ${projectId}`);
-    
+    const { id } = await params;
+
+    // 查询项目（带关联子表）
     const { data: project, error } = await supabaseAdmin
       .from('projects')
       .select(`
         *,
-        images (*),
-        videos (*)
+        hero_designs(*),
+        storyboard_items(* order by sort_order),
+        videos(*)
       `)
-      .eq('id', projectId)
+      .eq('id', id)
       .single();
-    
+
     if (error || !project) {
-      console.error('❌ 查询项目失败:', error);
-      return NextResponse.json(
-        { success: false, error: '项目不存在' },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, error: '项目不存在' }, { status: 404 });
     }
-    
-    console.log(`✅ 项目详情获取成功: ${project.title || '(未命名)'}`);
-    
-    return NextResponse.json({
-      success: true,
-      data: {
-        project,
-      },
-    });
-  } catch (error: any) {
-    console.error('❌ 获取项目详情出错:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+
+    return NextResponse.json({ success: true, data: { project } });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// 更新项目
 export async function PATCH(
   request: NextRequest,
-  props: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const params = await props.params;
-    const projectId = params.id;
-    console.log(`📝 更新项目: ${projectId}`);
-    
+    const { id } = await params;
     const body = await request.json();
-    const { title, style, status } = body;
-    
-    const updates: any = {};
-    if (title !== undefined) updates.title = title;
-    if (style !== undefined) updates.style = style;
-    if (status !== undefined) updates.status = status;
-    updates.updated_at = new Date().toISOString();
-    
-    const { data: project, error } = await supabaseAdmin
-      .from('projects')
-      .update(updates)
-      .eq('id', projectId)
-      .select()
-      .single();
-    
-    if (error || !project) {
-      console.error('❌ 更新项目失败:', error);
-      return NextResponse.json(
-        { success: false, error: `更新失败: ${error?.message}` },
-        { status: 500 }
-      );
+
+    const { title, story, style_id, hero_design, status } = body;
+    const updates: Record<string, any> = {};
+
+    if (title      !== undefined) updates.title      = title;
+    if (story      !== undefined) updates.story      = story;
+    if (style_id   !== undefined) updates.style_id   = style_id;
+    if (status     !== undefined) updates.status     = status;
+
+    // 更新 projects 表
+    if (Object.keys(updates).length > 0) {
+      const { error: projErr } = await supabaseAdmin
+        .from('projects')
+        .update(updates)
+        .eq('id', id);
+
+      if (projErr) return NextResponse.json({ success: false, error: projErr.message }, { status: 500 });
     }
-    
-    console.log(`✅ 项目更新成功: ${projectId}`);
-    
-    return NextResponse.json({
-      success: true,
-      data: {
-        project,
-      },
-    });
-  } catch (error: any) {
-    console.error('❌ 更新项目出错:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+
+    // 更新 hero_designs 表（upsert）
+    if (hero_design) {
+      const hd = typeof hero_design === 'string' ? JSON.parse(hero_design) : hero_design;
+      const { error: heroErr } = await supabaseAdmin
+        .from('hero_designs')
+        .upsert({ project_id: id, ...hd }, { onConflict: 'project_id' });
+
+      if (heroErr) console.error('⚠️ hero_design 更新失败:', heroErr);
+    }
+
+    // 重新查询完整数据返回
+    const { data: project } = await supabaseAdmin
+      .from('projects')
+      .select(`
+        *,
+        hero_designs(*),
+        storyboard_items(* order by sort_order),
+        videos(*)
+      `)
+      .eq('id', id)
+      .single();
+
+    return NextResponse.json({ success: true, data: { project } });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// 删除项目
 export async function DELETE(
-  request: NextRequest,
-  props: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const params = await props.params;
-    const projectId = params.id;
-    console.log(`🗑️ 删除项目: ${projectId}`);
-    
-    // 删除项目（级联删除 images 和 videos）
-    const { error } = await supabaseAdmin
-      .from('projects')
-      .delete()
-      .eq('id', projectId);
-    
-    if (error) {
-      console.error('❌ 删除项目失败:', error);
-      return NextResponse.json(
-        { success: false, error: `删除失败: ${error.message}` },
-        { status: 500 }
-      );
-    }
-    
-    console.log(`✅ 项目删除成功: ${projectId}`);
-    
-    return NextResponse.json({
-      success: true,
-      data: {
-        message: '项目已删除',
-      },
-    });
-  } catch (error: any) {
-    console.error('❌ 删除项目出错:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    const { id } = await params;
+    const { error } = await supabaseAdmin.from('projects').delete().eq('id', id);
+    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, data: { message: '项目已删除' } });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
