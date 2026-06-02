@@ -273,6 +273,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [editingStory, setEditingStory]   = useState('');
   const [savingText, setSavingText]       = useState(false);
 
+  // 跟踪是否已加载过（避免轮询覆盖用户输入）
+  const initialLoaded = useRef(false);
+
   const [editingHero, setEditingHero]     = useState<HeroDesign | null>(null);
   const [savingHero, setSavingHero]       = useState(false);
 
@@ -328,9 +331,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       }
 
       setProject(p);
-      setEditingTitle(p.title ?? '');
-      setEditingStory((p as any).story_content ?? p.story ?? '');
-      setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
+
+      // 只在首次加载时设置编辑值，后续轮询不覆盖用户输入
+      if (!initialLoaded.current) {
+        setEditingTitle(p.title ?? '');
+        setEditingStory((p as any).story_content ?? p.story ?? '');
+        setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
+        initialLoaded.current = true;
+      }
+      // 轮询时：只同步 hero_designs（不在编辑状态）
+      else {
+        setEditingHero(p.hero_designs ?? { name:'', species:'', color:'', costume:'', prop:'' });
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
