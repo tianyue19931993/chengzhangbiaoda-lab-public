@@ -62,7 +62,7 @@ export async function GET(
     if (projErr || !projectRow) {
       return NextResponse.json({ 
         success: false, 
-        error: `项目不存在 | debug: ${projErr?.message}` 
+        error: `项目不存在 | debug: ${String(projErr ?? '')}` 
       }, { status: 404 });
     }
 
