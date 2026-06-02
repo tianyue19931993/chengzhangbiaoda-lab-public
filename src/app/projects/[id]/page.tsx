@@ -341,19 +341,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     if (!projectId) return;
     loadProject(projectId);
 
-    // 状态非终态时轮询
-    const pendingStatuses = ['drafting', 'story_done', 'storyboard_done', 'video_done'];
+    // 只在图片/视频生成中时才轮询，编辑状态下不轮询避免覆盖输入
+    const generatingStatuses = ['drafting', 'story_done'];
     pollingRef.current = setInterval(() => {
-      if (project && !pendingStatuses.includes(project.status)) return;
+      if (!project || !generatingStatuses.includes(project.status)) return;
       loadProject(projectId);
-    }, 5000);
+    }, 8000);
 
     return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
   }, [projectId, loadProject, project?.status]);
 
   // ── 保存标题/故事 ──────────────────────────────────────
+  const [saveErr, setSaveErr] = useState('');
   const saveText = async () => {
     setSavingText(true);
+    setSaveErr('');
     try {
       const res  = await fetch(`/api/projects/${projectId}`, {
         method:  'PATCH',
@@ -363,10 +365,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       const data = await res.json();
       if (data.success) {
         setProject((p) => p ? { ...p, title: editingTitle, story: editingStory } : p);
+      } else {
+        setSaveErr(data.error ?? '保存失败');
       }
+    } catch (e: any) {
+      setSaveErr(e.message ?? '网络错误');
     } finally {
       setSavingText(false);
     }
+  };
   };
 
   // ── 保存角色设定 ───────────────────────────────────────
@@ -521,13 +528,16 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             />
           </div>
 
-          <button
-            onClick={saveText}
-            disabled={savingText}
-            className="px-8 py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
-          >
-            {savingText ? '💾 保存中...' : '💾 保存'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={saveText}
+              disabled={savingText}
+              className="px-8 py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
+            >
+              {savingText ? '💾 保存中...' : '💾 保存'}
+            </button>
+            {saveErr && <span className="text-red-500 text-sm font-bold">❌ {saveErr}</span>}
+          </div>
         </section>
 
         {/* ── 区域 2：角色设定 ──────────────────────────── */}
