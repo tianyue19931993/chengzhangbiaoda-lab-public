@@ -12,6 +12,16 @@ export async function GET(
   try {
     const { id } = await params;
 
+    // ── DEBUG: 先简单查询，看看到底什么情况 ──
+    const { data: allProjects, error: listErr } = await supabaseAdmin
+      .from('projects')
+      .select('id, status, created_at')
+      .limit(5);
+
+    console.log('🔍 [DEBUG] 所有项目:', JSON.stringify(allProjects));
+    console.log('🔍 [DEBUG] listErr:', JSON.stringify(listErr));
+    console.log('🔍 [DEBUG] 查询的 id:', id);
+
     // 查询项目（带关联子表）
     const { data: project, error } = await supabaseAdmin
       .from('projects')
@@ -24,8 +34,14 @@ export async function GET(
       .eq('id', id)
       .single();
 
+    console.log('🔍 [DEBUG] project:', JSON.stringify(project));
+    console.log('🔍 [DEBUG] error:', JSON.stringify(error));
+
     if (error || !project) {
-      return NextResponse.json({ success: false, error: '项目不存在' }, { status: 404 });
+      return NextResponse.json({ 
+        success: false, 
+        error: `项目不存在 | debug: listErr=${listErr?.message}, projectCount=${allProjects?.length ?? 0}` 
+      }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, data: { project } });
