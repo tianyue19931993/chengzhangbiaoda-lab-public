@@ -58,7 +58,7 @@ Style: ${style.imagePromptSuffix}`.trim();
 
 /** 默认 hero_design（API Key 未配置时降级使用） */
 export const DEFAULT_HERO_DESIGN = {
-  name: '小星星',
+  name: '小朋友f432703',
   species: '彩色小朋友',
   color: '彩虹七色',
   costume: '画笔图案的T恤',
