@@ -121,7 +121,7 @@ async function downloadImage(url: string, projectId: string): Promise<string> {
   const path = require('path');
   
   // 创建临时目录
-  const tempDir = path.join(process.cwd(), 'temp', 'images');
+  const tempDir = path.join('/tmp', 'mr-animation-images');
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
