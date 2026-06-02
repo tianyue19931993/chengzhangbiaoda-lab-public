@@ -33,15 +33,19 @@ export async function GET(
       supabaseAdmin.from('videos').select('*').eq('project_id', id).maybeSingle(),
     ]);
 
-    const project = {
-      ...projectRow,
-      hero_designs: heroRes.data ?? null,
-      storyboard_items: storyRes.data ?? [],
-      videos: videoRes.data ?? null,
-    };
+    // 子表无数据时，回退读取 is_default=true 的默认值
+    let heroData = heroRes.data;
+    if (!heroData) {
+      const { data: defaultHero } = await supabaseAdmin
+        .from('hero_designs')
+        .select('*')
+        .eq('is_default', true)
+        .maybeSingle();
+      if (defaultHero) heroData = defaultHero;
+    }
 
-    // 如果有关联 story_id，查询 stories 表获取正文
     let storyContent = projectRow.story;
+    // 优先从 story_id 关联查
     if (projectRow.story_id) {
       const { data: storyRow } = await supabaseAdmin
         .from('stories')
@@ -50,7 +54,23 @@ export async function GET(
         .maybeSingle();
       if (storyRow) storyContent = storyRow.content;
     }
-    (project as any).story_content = storyContent;
+    // 如果还没有内容，读默认故事
+    if (!storyContent) {
+      const { data: defaultStory } = await supabaseAdmin
+        .from('stories')
+        .select('content')
+        .eq('is_default', true)
+        .maybeSingle();
+      if (defaultStory) storyContent = defaultStory.content;
+    }
+
+    const project = {
+      ...projectRow,
+      hero_designs: heroData ?? null,
+      storyboard_items: storyRes.data ?? [],
+      videos: videoRes.data ?? null,
+      story_content: storyContent,
+    };
 
     return NextResponse.json({ success: true, data: { project } });
   } catch (err: any) {
@@ -134,7 +154,7 @@ export async function PATCH(
           hero_designs: (await supabaseAdmin.from('hero_designs').select('*').eq('project_id', id).maybeSingle()).data ?? null,
           storyboard_items: (await supabaseAdmin.from('storyboard_items').select('*').eq('project_id', id).order('sort_order', { ascending: true })).data ?? [],
           videos: (await supabaseAdmin.from('videos').select('*').eq('project_id', id).maybeSingle()).data ?? null,
-          ...(finalStory !== undefined && { _story_content: finalStory }),
+          ...(finalStory !== undefined && { story_content: finalStory }),
         } 
       } 
     });
