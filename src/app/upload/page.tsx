@@ -56,7 +56,7 @@ export default function UploadPage() {
     if (file) processFile(file);
   };
 
-  // 处理上传（上传 → 触发 AI 故事生成）
+  // 处理上传（上传 → 仅保存，AI 生成由用户手动触发）
   const handleUpload = async () => {
     if (!selectedFile) { alert('请先选择一张图片！'); return; }
     if (!childName.trim()) { alert('请填写小朋友的名字！'); return; }
@@ -79,31 +79,15 @@ export default function UploadPage() {
       if (!uploadData.success) throw new Error(uploadData.error || '上传失败');
 
       const { projectId, originalImageUrl } = uploadData.data;
-      setUploadProgress('✅ 上传成功！正在生成故事...');
+      setUploadProgress('✅ 上传成功！');
 
-      // 触发 AI 故事生成（视觉理解 → 生成故事）
-      const storyRes = await fetch('/api/generate-story', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, imageUrl: originalImageUrl, style: selectedStyle }),
-      });
-      const storyData = await storyRes.json();
+      // TODO: 配好 DOUBAO_API_KEY 后，取消下面注释以自动触发 AI 生成
+      // if (process.env.NEXT_PUBLIC_ENABLE_AI === 'true') {
+      //   setUploadProgress('✅ 上传成功！正在生成故事...');
+      //   await fetch('/api/generate-story', { ... });
+      // }
 
-      if (!storyData.success) {
-        console.warn('⚠️ 故事生成失败，但项目已创建:', storyData.error);
-        // 故事生成失败也跳转到详情页（可以稍后重试）
-      } else {
-        setUploadProgress('✅ 故事生成成功！正在生成分镜图...');
-        // 自动触发图片生成
-        const genImgRes = await fetch('/api/generate-images', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId, prompts: storyData.data.prompts, style: selectedStyle }),
-        });
-        if (!genImgRes.ok) console.warn('⚠️ 图片生成请求失败');
-      }
-
-      // 跳转到项目详情页
+      // 直接跳转到项目详情页（AI 生成可稍后手动触发）
       setTimeout(() => router.push(`/projects/${projectId}`), 500);
     } catch (error: any) {
       console.error('上传失败:', error);

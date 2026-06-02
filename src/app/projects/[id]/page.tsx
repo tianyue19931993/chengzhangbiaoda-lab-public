@@ -76,6 +76,8 @@ export default function ProjectDetailPage() {
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [promptInput, setPromptInput] = useState('');
   const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
+  const [generatingImages, setGeneratingImages] = useState(false);
+  const [generatingVideo, setGeneratingVideo] = useState(false);
   const lightboxRef = useRef<HTMLDivElement>(null);
 
   // 加载项目详情
@@ -230,14 +232,92 @@ export default function ProjectDetailPage() {
     setEditingPromptIndex(orderIndex);
   };
 
-  // 视频重新生成
-  const handleRegenVideo = () => {
+  // 一键生成全部九宫格分镜图
+  const handleGenerateAllImages = async () => {
+    if (!project) return;
+    setGeneratingImages(true);
+    try {
+      const res = await fetch('/api/generate-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id, style: project.style }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ 分镜图生成中，请稍后刷新查看');
+        loadProject();
+      } else {
+        alert(`❌ 生成失败：${data.error || '未知错误'}`);
+      }
+    } catch (e) {
+      alert('❌ 生成失败，请检查 DOUBAO_API_KEY 是否已配置');
+    } finally {
+      setGeneratingImages(false);
+    }
+  };
+
+  // 视频重新生成（有视频时调这个函数）
+  const handleRegenVideo = async () => {
     if (!project?.videos?.[0]) return;
     if ((project.videos[0].generation_count ?? 0) >= 1) {
       alert('❌ 视频已达到最大重生次数（1次）');
       return;
     }
-    alert('🎬 视频重新生成功能待AI服务接入后启用！');
+    await handleGenerateVideo();
+  };
+
+  // 生成视频（统一的底层函数）
+  const handleGenerateVideo = async () => {
+    if (!project) return;
+    setGeneratingVideo(true);
+    try {
+      const imageUrls = (project.images || [])
+        .sort((a: any, b: any) => a.order_index - b.order_index)
+        .map((img: any) => img.url)
+        .filter(Boolean);
+      const res = await fetch('/api/generate-video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id, imageUrls, style: project.style }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ 视频生成中，请稍后刷新查看');
+        loadProject();
+      } else {
+        alert(`❌ 生成失败：${data.error || '未知错误'}`);
+      }
+    } catch (e) {
+      alert('❌ 生成失败，请检查 DOUBAO_API_KEY 是否已配置');
+    } finally {
+      setGeneratingVideo(false);
+    }
+  };
+
+  // 从 Lightbox 直接重新生成（用当前 prompt）
+  const handleRegenImageDirectly = async (orderIndex: number) => {
+    const image = project?.images?.find((i: any) => i.order_index === orderIndex);
+    if (!image || (image.regeneration_count ?? 0) >= 1) {
+      alert('该图片已达到最大重生次数（1次）');
+      return;
+    }
+    try {
+      const res = await fetch('/api/regenerate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project?.id, orderIndex, prompt: image.prompt }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ 重新生成中，请稍后刷新查看');
+        setLightboxIndex(null);
+        loadProject();
+      } else {
+        alert(`❌ ${data.error || '重新生成失败'}`);
+      }
+    } catch (e) {
+      alert('❌ 重新生成失败');
+    }
   };
 
   // 键盘关闭 lightbox
@@ -380,9 +460,18 @@ export default function ProjectDetailPage() {
 
           {/* ===== 九宫格分镜图（16:9）===== */}
           <div className="mb-8 md:mb-12">
-            <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-4 md:mb-6">
-              🎨 九宫格分镜
-            </h3>
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h3 className="text-xl md:text-2xl font-bold text-gray-800">
+                🎨 九宫格分镜
+              </h3>
+              <KidButton
+                onClick={handleGenerateAllImages}
+                disabled={generatingImages}
+                className="bg-purple-500 hover:bg-purple-600 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base disabled:opacity-50"
+              >
+                {generatingImages ? '⏳ 生成中...' : '🎨 一键出分镜图'}
+              </KidButton>
+            </div>
 
             <div className="grid grid-cols-3 gap-2 md:gap-4">
               {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => {
@@ -420,40 +509,6 @@ export default function ProjectDetailPage() {
                         <span className="text-xs md:text-sm text-gray-400">分镜 {index + 1}</span>
                       </div>
                     )}
-
-                    {/* 场景标题 + 提示词 + 操作 */}
-                    <div className="mt-1 md:mt-2 px-1">
-                      <p className="text-xs font-bold text-gray-700 truncate">{sceneTitle}</p>
-                      <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mt-0.5" title={prompt}>
-                        📝 {prompt}
-                      </p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs text-gray-400">
-                          {hasImage ? (
-                            `✅ 重生剩 ${1 - (image.regeneration_count ?? 0)}`
-                          ) : (
-                            <span className="text-yellow-500">⏳ 待生成</span>
-                          )}
-                        </span>
-                        {hasImage && (
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => handleDownloadImage(image.url, index)}
-                              className="text-xs bg-blue-100 text-blue-600 rounded px-1.5 py-0.5 hover:bg-blue-200 whitespace-nowrap"
-                              disabled={downloadingIndex === index}
-                            >
-                              {downloadingIndex === index ? '⏳' : '⬇️ 下载'}
-                            </button>
-                            <button
-                              onClick={() => { setPromptInput(prompt); setEditingPromptIndex(index); }}
-                              className="text-xs bg-purple-100 text-purple-600 rounded px-1.5 py-0.5 hover:bg-purple-200 whitespace-nowrap"
-                            >
-                              ✏️ Prompt
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
                   </div>
                 );
               })}
@@ -462,9 +517,29 @@ export default function ProjectDetailPage() {
 
           {/* ===== 动画视频 ===== */}
           <div className="mb-8 md:mb-12">
-            <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-4 md:mb-6">
-              🎬 动画视频
-            </h3>
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h3 className="text-xl md:text-2xl font-bold text-gray-800">
+                🎬 动画视频
+              </h3>
+              {!(project.videos?.length > 0 && project.videos[0].url) && (
+                <KidButton
+                  onClick={handleGenerateVideo}
+                  disabled={generatingVideo}
+                  className="bg-orange-400 hover:bg-orange-500 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base disabled:opacity-50"
+                >
+                  {generatingVideo ? '⏳ 生成中...' : '🎬 生成视频'}
+                </KidButton>
+              )}
+              {project.videos?.length > 0 && project.videos[0].url && (project.videos[0].generation_count ?? 0) < 1 && (
+                <KidButton
+                  onClick={handleRegenVideo}
+                  disabled={generatingVideo}
+                  className="bg-orange-400 hover:bg-orange-500 text-white px-3 md:px-4 py-1 md:py-2 text-sm md:text-base disabled:opacity-50"
+                >
+                  {generatingVideo ? '⏳ 生成中...' : '🔄 重新生成视频'}
+                </KidButton>
+              )}
+            </div>
 
             {project.videos?.length > 0 && project.videos[0].url ? (
               <div className="relative">
@@ -532,10 +607,35 @@ export default function ProjectDetailPage() {
           >
             ✕
           </button>
-          {/* 底部信息 */}
+          {/* 底部信息 + 操作按钮 */}
           <div className="fixed bottom-2 md:bottom-6 left-0 right-0 text-white text-center px-2 md:px-4 z-50">
-            <p className="text-sm md:text-base font-bold">分镜 {lightboxIndex + 1}：{project.images[lightboxIndex].scene_title || ''}</p>
-            <p className="text-xs md:text-sm text-gray-300 mt-1 max-w-2xl mx-auto line-clamp-2">{project.images[lightboxIndex].prompt}</p>
+            <p className="text-sm md:text-base font-bold mb-2">分镜 {lightboxIndex + 1}：{project.images[lightboxIndex]?.scene_title || ''}</p>
+            <div className="flex justify-center gap-2 flex-wrap">
+              <button
+                onClick={() => handleDownloadImage(project.images[lightboxIndex].url, lightboxIndex)}
+                className="bg-blue-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-blue-600 transition-colors"
+                disabled={downloadingIndex === lightboxIndex}
+              >
+                {downloadingIndex === lightboxIndex ? '⏳' : '⬇️ 下载'}
+              </button>
+              <button
+                onClick={() => {
+                  setPromptInput(project.images[lightboxIndex]?.prompt || '');
+                  setEditingPromptIndex(lightboxIndex);
+                  setLightboxIndex(null);
+                }}
+                className="bg-purple-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-purple-600 transition-colors"
+              >
+                ✏️ 改Prompt
+              </button>
+              <button
+                onClick={() => handleRegenImageDirectly(lightboxIndex)}
+                className="bg-orange-500 text-white rounded-full px-3 py-1 text-xs md:text-sm hover:bg-orange-600 transition-colors"
+                disabled={(project.images[lightboxIndex]?.regeneration_count ?? 0) >= 1}
+              >
+                🔄 重生成
+              </button>
+            </div>
           </div>
           {/* 左右切换 */}
           <button
