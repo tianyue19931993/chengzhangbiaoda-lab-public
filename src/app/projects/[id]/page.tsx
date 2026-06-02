@@ -374,7 +374,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       setSavingText(false);
     }
   };
-  };
 
   // ── 保存角色设定 ───────────────────────────────────────
   const saveHero = async () => {
