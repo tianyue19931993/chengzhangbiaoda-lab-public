@@ -69,7 +69,7 @@ function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: Selecte
 
         <form onSubmit={(e) => { e.preventDefault(); searchUsers(nameInput.trim()); }} className="bg-white rounded-3xl shadow-xl p-6 mb-6">
           <div className="flex gap-2">
-            <input type="text" value={nameInput} onChange={e => setNameInput(e.value)}
+            <input type="text" value={nameInput} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNameInput(e.target.value)}
               placeholder="输入你的名字搜索..."
               className="flex-1 text-lg outline-none border-2 border-purple-200 rounded-2xl py-3 px-4 focus:border-purple-400" />
             <button type="submit" className="px-6 py-3 bg-purple-500 text-white rounded-2xl font-bold hover:bg-purple-600 shadow text-lg">🔍</button>
