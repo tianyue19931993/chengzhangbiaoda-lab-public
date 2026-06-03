@@ -149,7 +149,7 @@ export default function SelectStudentPage() {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xl font-bold text-gray-800">{user.name}</span>
                         <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-xs font-bold">
-                          第{SESSION_TEXT[user.session_number] ?? user.session_number}
+                          {SESSION_TEXT[user.session_number] ?? user.session_number}
                         </span>
                       </div>
                       <p className="text-gray-500 text-sm truncate">{user.institution}</p>

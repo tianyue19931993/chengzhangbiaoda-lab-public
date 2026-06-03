@@ -104,7 +104,6 @@ export default function UploadPage() {
       if (!data.success) throw new Error(data.error ?? '上传失败');
 
       // 上传成功后清除选中状态（防止重复提交）
-      sessionStorage.removeItem('selected_student');
       setTimeout(() => router.push('/my-works'), 600);
     } catch (err: any) {
       alert('上传失败：' + err.message);
