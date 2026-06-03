@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
 
@@ -28,6 +28,8 @@ export default function TeacherPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [nameSearch, setNameSearch] = useState('');
 
   useEffect(() => { loadAllProjects(); }, []);
 
@@ -45,6 +47,23 @@ export default function TeacherPage() {
       setLoading(false);
     }
   };
+
+  // 筛选逻辑
+  const filteredProjects = useMemo(() => {
+    return projects.filter(p => {
+      if (statusFilter && p.status !== statusFilter) return false;
+      if (nameSearch && !p.child_name.toLowerCase().includes(nameSearch.toLowerCase())) return false;
+      return true;
+    });
+  }, [projects, statusFilter, nameSearch]);
+
+  // 统计
+  const stats = useMemo(() => ({
+    all: projects.length,
+    pending: projects.filter(p => p.status === 'pending').length,
+    processing: projects.filter(p => p.status === 'processing').length,
+    completed: projects.filter(p => p.status === 'completed').length,
+  }), [projects]);
 
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-orange-100 to-red-100">
@@ -67,29 +86,61 @@ export default function TeacherPage() {
           </div>
         )}
 
-        {/* 统计卡片 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {/* 统计卡片 - 可点击筛选 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
-            { label: '全部', value: projects.length, color: 'from-blue-400 to-blue-600' },
-            { label: '待处理', value: projects.filter(p => p.status === 'pending').length, color: 'from-yellow-400 to-yellow-600' },
-            { label: '处理中', value: projects.filter(p => p.status === 'processing').length, color: 'from-blue-400 to-indigo-600' },
-            { label: '已完成', value: projects.filter(p => p.status === 'completed').length, color: 'from-green-400 to-green-600' },
-          ].map(({ label, value, color }) => (
-            <div key={label} className={'bg-gradient-to-r ' + color + ' rounded-2xl p-4 text-white shadow-lg'}>
+            { key: '', label: '全部', value: stats.all, color: 'from-blue-400 to-blue-600' },
+            { key: 'pending', label: '待处理', value: stats.pending, color: 'from-yellow-400 to-yellow-600' },
+            { key: 'processing', label: '处理中', value: stats.processing, color: 'from-blue-400 to-indigo-600' },
+            { key: 'completed', label: '已完成', value: stats.completed, color: 'from-green-400 to-green-600' },
+          ].map(({ key, label, value, color }) => (
+            <div key={key}
+              onClick={() => setStatusFilter(key)}
+              className={'bg-gradient-to-r ' + color + ' rounded-2xl p-4 text-white shadow-lg cursor-pointer transition-all hover:scale-105 ' +
+                (statusFilter === key ? 'ring-4 ring-white scale-105' : '')}>
               <p className="text-3xl font-bold">{value}</p>
               <p className="text-sm opacity-90">{label}</p>
             </div>
           ))}
         </div>
 
-        {projects.length === 0 ? (
+        {/* 搜索栏 */}
+        <div className="bg-white rounded-2xl shadow-lg p-4 mb-6 flex gap-3 items-center">
+          <span className="text-xl">🔍</span>
+          <input
+            type="text"
+            value={nameSearch}
+            onChange={(e) => setNameSearch(e.target.value)}
+            placeholder="输入学生名字搜索..."
+            className="flex-1 text-lg outline-none placeholder-gray-400"
+          />
+          {(statusFilter || nameSearch) && (
+            <button onClick={() => { setStatusFilter(''); setNameSearch(''); }}
+              className="px-4 py-2 bg-gray-100 rounded-xl text-gray-600 hover:bg-gray-200 text-sm font-bold">
+              ✕ 清除筛选
+            </button>
+          )}
+        </div>
+
+        {/* 筛选结果提示 */}
+        {(statusFilter || nameSearch) && (
+          <div className="text-sm text-gray-600 mb-4">
+            筛选结果：{filteredProjects.length} 个项目
+            {statusFilter && <span className="ml-2 px-2 py-0.5 bg-orange-100 rounded-full text-orange-700">{STATUS_MAP[statusFilter]?.text}</span>}
+            {nameSearch && <span className="ml-2 px-2 py-0.5 bg-orange-100 rounded-full text-orange-700">"{nameSearch}"</span>}
+          </div>
+        )}
+
+        {filteredProjects.length === 0 ? (
           <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 text-center">
-            <div className="text-6xl md:text-8xl mb-4">📭</div>
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">暂无提交作品</h2>
+            <div className="text-6xl md:text-8xl mb-4">{projects.length === 0 ? '📭' : '🔍'}</div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">
+              {projects.length === 0 ? '暂无提交作品' : '没有匹配的项目'}
+            </h2>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-            {projects.map((p) => {
+            {filteredProjects.map((p) => {
               const info = STATUS_MAP[p.status] ?? { text: p.status, color: 'bg-gray-100 text-gray-600' };
               return (
                 <Link key={p.id} href={`/teacher/projects/${p.id}`} className="block">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import KidButton from '@/components/KidButton';
@@ -34,29 +34,80 @@ const STYLE_NAMES: Record<string, string> = {
   cyberpunk: '🌃 赛博朋克',
 };
 
-// 九宫格占位图
-const STORYBOARD_PLACEHOLDER = (
-  <div className="w-full max-h-80 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 border-4 border-dashed border-purple-200 flex flex-col items-center justify-center mx-auto">
-    <div className="text-6xl mb-3">🎬</div>
-    <p className="text-lg text-purple-400 font-bold">九宫格分镜图</p>
-    <p className="text-sm text-gray-400 mt-1">正在制作中...</p>
-  </div>
-);
+// 下载文件（兼容手机和PC）
+function downloadFile(url: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  // 兼容跨域：先尝试直接下载，失败则新窗口打开
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 
-// 视频占位符
-const VIDEO_PLACEHOLDER = (
-  <div className="w-full max-h-80 rounded-2xl bg-gradient-to-br from-orange-50 to-red-50 border-4 border-dashed border-orange-200 flex flex-col items-center justify-center mx-auto">
-    <div className="text-6xl mb-3">🎥</div>
-    <p className="text-lg text-orange-400 font-bold">动画视频</p>
-    <p className="text-sm text-gray-400 mt-1">正在制作中...</p>
-  </div>
-);
+// 图片查看器组件
+function ImageViewer({ src, onClose }: { src: string; onClose: () => void }) {
+  const handleDownload = () => {
+    const filename = '分镜图_' + Date.now() + '.jpg';
+    downloadFile(src, filename);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4"
+      onClick={onClose}>
+      {/* 关闭按钮 */}
+      <button onClick={onClose}
+        className="absolute top-4 right-4 w-10 h-10 bg-white/20 backdrop-blur rounded-full flex items-center justify-center text-white text-2xl hover:bg-white/40 z-10">
+        ✕
+      </button>
+
+      {/* 图片 - 点击图片本身不关闭 */}
+      <img src={src} alt="放大查看" className="max-w-full max-h-[75vh] rounded-xl object-contain"
+        onClick={(e) => e.stopPropagation()} />
+
+      {/* 底部下载按钮 */}
+      <div className="mt-4 flex gap-4" onClick={(e) => e.stopPropagation()}>
+        <button onClick={handleDownload}
+          className="px-6 py-3 bg-white/20 backdrop-blur rounded-2xl text-white font-bold hover:bg-white/40 text-lg">
+          📥 下载图片
+        </button>
+        <button onClick={onClose}
+          className="px-6 py-3 bg-white/20 backdrop-blur rounded-2xl text-white font-bold hover:bg-white/40 text-lg">
+          ✕ 关闭
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// 视频播放器组件（带下载按钮）
+function VideoWithDownload({ src }: { src: string }) {
+  const handleDownload = () => {
+    const filename = '动画视频_' + Date.now() + '.mp4';
+    downloadFile(src, filename);
+  };
+
+  return (
+    <div>
+      <video src={src} controls playsInline className="w-full rounded-2xl shadow-lg mx-auto" />
+      <div className="mt-3 text-center">
+        <button onClick={handleDownload}
+          className="px-6 py-3 bg-gradient-to-r from-orange-400 to-red-400 text-white rounded-2xl font-bold hover:opacity-90 shadow-lg text-base md:text-lg">
+          📥 下载视频
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [projectId, setProjectId] = useState('');
+  const [viewerSrc, setViewerSrc] = useState<string | null>(null);
 
   useEffect(() => { params.then(({ id }) => setProjectId(id)); }, [params]);
 
@@ -71,6 +122,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [projectId]);
+
+  // ESC 关闭图片查看器
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewerSrc(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
@@ -91,6 +151,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
+      {/* 图片查看器浮层 */}
+      {viewerSrc && <ImageViewer src={viewerSrc} onClose={() => setViewerSrc(null)} />}
+
       <div className="max-w-4xl mx-auto space-y-8">
 
         {/* 头部信息卡片 */}
@@ -117,11 +180,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </p>
         </div>
 
-        {/* 原创画作 */}
+        {/* 原创画作 - 可点击放大+下载 */}
         <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">📷 我的创意画</h2>
           {project.original_image_url ? (
-            <img src={project.original_image_url} alt="原创画作" className="max-w-full rounded-2xl shadow-lg mx-auto" />
+            <div className="cursor-pointer" onClick={() => setViewerSrc(project.original_image_url!)}>
+              <img src={project.original_image_url} alt="原创画作"
+                className="max-w-full rounded-2xl shadow-lg mx-auto hover:opacity-90 transition-opacity" />
+              <p className="text-center text-gray-400 text-sm mt-2">👆 点击查看大图</p>
+            </div>
           ) : (
             <div className="w-full h-48 rounded-2xl bg-gray-100 flex items-center justify-center">
               <p className="text-gray-400">暂无图片</p>
@@ -129,23 +196,35 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           )}
         </section>
 
-        {/* 九宫格分镜图（有则展示，无则占位） */}
+        {/* 九宫格分镜图 - 可点击放大+下载 */}
         <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">🎬 九宫格分镜</h2>
           {project.storyboard_image_url ? (
-            <img src={project.storyboard_image_url} alt="九宫格分镜" className="max-w-full rounded-2xl shadow-lg mx-auto" />
+            <div className="cursor-pointer" onClick={() => setViewerSrc(project.storyboard_image_url!)}>
+              <img src={project.storyboard_image_url} alt="九宫格分镜"
+                className="max-w-full rounded-2xl shadow-lg mx-auto hover:opacity-90 transition-opacity" />
+              <p className="text-center text-gray-400 text-sm mt-2">👆 点击查看大图</p>
+            </div>
           ) : (
-            STORYBOARD_PLACEHOLDER
+            <div className="w-full max-h-80 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 border-4 border-dashed border-purple-200 flex flex-col items-center justify-center mx-auto">
+              <div className="text-6xl mb-3">🎬</div>
+              <p className="text-lg text-purple-400 font-bold">九宫格分镜图</p>
+              <p className="text-sm text-gray-400 mt-1">正在制作中...</p>
+            </div>
           )}
         </section>
 
-        {/* 动画视频（有则展示，无则占位） */}
+        {/* 动画视频 - 播放+下载 */}
         <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">🎥 动画视频</h2>
           {project.video_url ? (
-            <video src={project.video_url} controls className="w-full rounded-2xl shadow-lg mx-auto" />
+            <VideoWithDownload src={project.video_url} />
           ) : (
-            VIDEO_PLACEHOLDER
+            <div className="w-full max-h-80 rounded-2xl bg-gradient-to-br from-orange-50 to-red-50 border-4 border-dashed border-orange-200 flex flex-col items-center justify-center mx-auto">
+              <div className="text-6xl mb-3">🎥</div>
+              <p className="text-lg text-orange-400 font-bold">动画视频</p>
+              <p className="text-sm text-gray-400 mt-1">正在制作中...</p>
+            </div>
           )}
         </section>
 

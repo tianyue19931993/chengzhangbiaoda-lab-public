@@ -123,9 +123,9 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
     setUploadProgress(0);
 
     // 文件大小检查
-    const maxSize = format === 'video' ? 200 * 1024 * 1024 : 20 * 1024 * 1024;
+    const maxSize = format === 'video' ? 4.5 * 1024 * 1024 : 20 * 1024 * 1024;
     if (file.size > maxSize) {
-      alert(`文件过大：${format === 'video' ? '视频最大 200MB' : '图片最大 20MB'}`);
+      alert(`文件过大：${format === 'video' ? '视频最大 4.5MB' : '图片最大 20MB'}`);
       setUploading(false);
       return;
     }
@@ -268,7 +268,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
               {uploadingVideo ? '上传中...' : '📎 上传视频'}
             </button>
           </div>
-          <p className="text-center text-gray-400 text-sm mt-2">支持最大 200MB 的视频文件</p>
+          <p className="text-center text-gray-400 text-sm mt-2">支持最大 4.5MB 的视频文件（超大文件可压缩后上传）</p>
         </section>
 
         {/* 状态控制 */}
