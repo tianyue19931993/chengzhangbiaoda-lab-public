@@ -197,7 +197,7 @@ export default function MyWorksPage() {
             <div className="text-4xl">👦</div>
             <div>
               <h1 className="text-3xl md:text-4xl font-bold text-purple-600">我的作品</h1>
-              <p className="text-purple-400 text-sm">{selectedStudent.name} · {selectedStudent.institution}</p>
+              <p className="text-purple-400 text-sm">{selectedStudent?.name} · {selectedStudent?.institution}</p>
             </div>
           </div>
           <div className="flex gap-3">
