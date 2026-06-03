@@ -24,6 +24,45 @@ const STATUS_MAP: Record<string, { text: string; color: string }> = {
   failed:     { text: '❌ 失败',          color: 'bg-red-100 text-red-700' },
 };
 
+const STYLE_NAMES: Record<string, string> = {
+  pixar: 'Pixar3D',
+  chinese: '国风',
+  anime: '二次元',
+  watercolor: '水彩',
+  cyberpunk: '赛博朋克',
+};
+
+// 下载单个原图
+function downloadOriginal(project: Project) {
+  if (!project.original_image_url) return;
+  const styleName = STYLE_NAMES[project.style_id] ?? project.style_id;
+  const filename = `${project.child_name}_原图_${styleName}.jpg`;
+  const a = document.createElement('a');
+  a.href = project.original_image_url;
+  a.download = filename;
+  a.target = '_blank';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// 批量下载所有原图
+async function batchDownload(projects: Project[]) {
+  const withImages = projects.filter(p => p.original_image_url);
+  if (withImages.length === 0) {
+    alert('没有可下载的原图');
+    return;
+  }
+  if (withImages.length > 10) {
+    if (!confirm(`即将下载 ${withImages.length} 张图片，是否继续？`)) return;
+  }
+  // 逐个下载（浏览器限制，无法真正批量）
+  for (const p of withImages) {
+    await new Promise(resolve => setTimeout(resolve, 500)); // 间隔避免被拦截
+    downloadOriginal(p);
+  }
+}
+
 export default function TeacherPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,7 +116,13 @@ export default function TeacherPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl md:text-5xl font-bold text-orange-600">👨‍🏫 老师工作台</h1>
-          <Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-orange-700 hover:bg-white transition-colors shadow">← 返回首页</Link>
+          <div className="flex gap-3">
+            <button onClick={() => batchDownload(filteredProjects)}
+              className="px-4 py-3 bg-green-500 text-white rounded-2xl font-bold hover:bg-green-600 shadow text-sm md:text-base flex items-center gap-2">
+              📥 批量下载原图 ({filteredProjects.filter(p => p.original_image_url).length})
+            </button>
+            <Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-orange-700 hover:bg-white transition-colors shadow text-sm md:text-base">← 返回首页</Link>
+          </div>
         </div>
 
         {error && (
@@ -143,28 +188,36 @@ export default function TeacherPage() {
             {filteredProjects.map((p) => {
               const info = STATUS_MAP[p.status] ?? { text: p.status, color: 'bg-gray-100 text-gray-600' };
               return (
-                <Link key={p.id} href={`/teacher/projects/${p.id}`} className="block">
-                  <div className="bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl transition-all hover:-translate-y-1 cursor-pointer">
-                    <div className="h-36 md:h-48 bg-gradient-to-r from-orange-200 to-red-200 flex items-center justify-center overflow-hidden">
-                      {p.original_image_url ? (
-                        <img src={p.original_image_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="text-7xl opacity-40">🎨</div>
-                      )}
-                    </div>
-                    <div className="p-4 md:p-6">
-                      <h3 className="text-lg font-bold text-gray-800 mb-2 truncate">{p.project_name || '未命名'}</h3>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${info.color}`}>{info.text}</span>
-                        <span className="text-gray-400 text-xs">{p.style_name ?? p.style_id}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-orange-600 text-sm font-bold">👦 {p.child_name}</span>
-                        <span className="text-gray-400 text-xs">{formatDate(p.created_at)}</span>
-                      </div>
-                    </div>
+                <div key={p.id} className="bg-white rounded-3xl shadow-xl overflow-hidden hover:shadow-2xl transition-all hover:-translate-y-1">
+                  {/* 图片区域 */}
+                  <div className="relative h-36 md:h-48 bg-gradient-to-r from-orange-200 to-red-200 flex items-center justify-center overflow-hidden">
+                    {p.original_image_url ? (
+                      <img src={p.original_image_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-7xl opacity-40">🎨</div>
+                    )}
+                    {/* 下载原图按钮 */}
+                    {p.original_image_url && (
+                      <button onClick={() => downloadOriginal(p)}
+                        className="absolute top-2 right-2 px-3 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-green-700 hover:bg-white shadow flex items-center gap-1">
+                        📥 原图
+                      </button>
+                    )}
                   </div>
-                </Link>
+
+                  {/* 信息区域 */}
+                  <Link href={`/teacher/projects/${p.id}`} className="block p-4 md:p-6">
+                    <h3 className="text-lg font-bold text-gray-800 mb-2 truncate">{p.project_name || '未命名'}</h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${info.color}`}>{info.text}</span>
+                      <span className="text-gray-400 text-xs">{p.style_name ?? p.style_id}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-orange-600 text-sm font-bold">👦 {p.child_name}</span>
+                      <span className="text-gray-400 text-xs">{formatDate(p.created_at)}</span>
+                    </div>
+                  </Link>
+                </div>
               );
             })}
           </div>

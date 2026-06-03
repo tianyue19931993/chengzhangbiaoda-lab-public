@@ -134,6 +134,17 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
       const result = await uploadToSupabase(projectId, file, format);
 
       if (result.success) {
+        // 自动更新状态：上传分镜图→处理中，上传视频→已完成
+        const newStatus = format === 'storyboard' ? 'processing' : 'completed';
+        const prevStatus = project?.status ?? 'pending';
+        const shouldUpdate = newStatus !== prevStatus;
+
+        await fetch('/api/teacher/projects/' + projectId, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus }),
+        });
+
         // 刷新数据
         fetch('/api/teacher/projects/' + projectId)
           .then(r => r.json())
@@ -143,7 +154,9 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
               setLogs(d.data.export_logs ?? []);
             }
           });
-        alert(format === 'storyboard' ? '分镜图上传成功！' : '视频上传成功！');
+
+        const statusHint = format === 'storyboard' ? '状态已更新为：⚙️ 处理中' : '状态已更新为：✅ 已完成';
+        alert((format === 'storyboard' ? '分镜图' : '视频') + '上传成功！' + statusHint);
       } else {
         alert('上传失败：' + result.error);
       }
