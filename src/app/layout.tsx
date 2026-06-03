@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  title: 'MR 研学馆 - 儿童 AI 创意动画平台',
-  description: '让孩子的新意变成动画',
+  title: '成长表达实验室',
+  description: '让孩子的创意变成动画',
 };
 
 export default function RootLayout({

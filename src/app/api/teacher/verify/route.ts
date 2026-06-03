@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '系统错误，请联系管理员' }, { status: 500 });
     }
 
-    if (password === data.techmima) {
+    // 兼容数字和字符串类型（数据库可能存数字，前端传字符串）
+    if (String(password) === String(data.techmima)) {
       return NextResponse.json({ success: true });
     } else {
       return NextResponse.json({ success: false, error: '密码错误' }, { status: 401 });

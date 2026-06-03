@@ -27,10 +27,10 @@ interface ExportLog {
 }
 
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
-  pending:    { text: '\u23f3 Pending',     color: 'bg-yellow-100 text-yellow-700' },
-  processing: { text: '\u2699\ufe0f Processing', color: 'bg-blue-100 text-blue-700' },
-  completed:  { text: '\u2705 Completed',  color: 'bg-green-100 text-green-700' },
-  failed:     { text: '\u274c Failed',     color: 'bg-red-100 text-red-700' },
+  pending:    { text: '⏳ 等待处理',     color: 'bg-yellow-100 text-yellow-700' },
+  processing: { text: '⚙️ 处理中',       color: 'bg-blue-100 text-blue-700' },
+  completed:  { text: '✅ 已完成',        color: 'bg-green-100 text-green-700' },
+  failed:     { text: '❌ 失败',          color: 'bg-red-100 text-red-700' },
 };
 
 export default function TeacherProjectDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -39,7 +39,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
   const [loading, setLoading] = useState(true);
   const [projectId, setProjectId] = useState('');
 
-  // Upload states
+  // 上传状态
   const [uploadingStoryboard, setUploadingStoryboard] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [sbFileInput, setSbFileInput] = useState<HTMLInputElement | null>(null);
@@ -78,7 +78,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
       const data = await res.json();
 
       if (data.success) {
-        // Refresh data
+        // 刷新数据
         fetch('/api/teacher/projects/' + projectId)
           .then(r => r.json())
           .then(d => {
@@ -87,12 +87,12 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
               setLogs(d.data.export_logs ?? []);
             }
           });
-        alert(format === 'storyboard' ? 'Storyboard uploaded!' : 'Video uploaded!');
+        alert(format === 'storyboard' ? '分镜图上传成功！' : '视频上传成功！');
       } else {
-        alert('Upload failed: ' + data.error);
+        alert('上传失败：' + data.error);
       }
     } catch (e: any) {
-      alert('Error: ' + e.message);
+      alert('错误：' + e.message);
     } finally {
       setUploading(false);
     }
@@ -112,7 +112,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-orange-100 to-red-100">
-      <div className="text-6xl animate-bounce mb-4">{'\u23f3'}</div>
+      <div className="text-6xl animate-bounce mb-4">⏳</div>
     </div>
   );
 
@@ -124,50 +124,52 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
     <div className="min-h-screen bg-gradient-to-b from-orange-100 to-red-100 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
 
-        {/* Header */}
+        {/* 头部 */}
         <div className="flex items-center justify-between">
           <button onClick={() => router.back()} className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-orange-700 hover:bg-white transition-colors shadow">
-            {'\u2190'} Back
+            ← 返回
           </button>
-          <h1 className="text-xl md:text-2xl font-bold text-orange-700">{project.project_name || 'Untitled'}</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-orange-700">{project.project_name || '未命名'}</h1>
           <span className={'px-4 py-2 rounded-full text-sm font-bold ' + info.color}>{info.text}</span>
         </div>
 
-        {/* Student Info */}
+        {/* 学生信息 */}
         <div className="bg-white rounded-3xl shadow-xl p-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-            <div><span className="font-bold text-gray-500">Child:</span> {project.child_name}</div>
-            <div><span className="font-bold text-gray-500">Style:</span> {project.style_name ?? project.style_id}</div>
-            <div><span className="font-bold text-gray-500">Created:</span> {new Date(project.created_at).toLocaleString()}</div>
-            <div><span className="font-bold text-gray-500">Status:</span> {project.status}</div>
+            <div><span className="font-bold text-gray-500">小朋友：</span> {project.child_name}</div>
+            <div><span className="font-bold text-gray-500">风格：</span> {project.style_name ?? project.style_id}</div>
+            <div><span className="font-bold text-gray-500">创建时间：</span> {new Date(project.created_at).toLocaleString('zh-CN')}</div>
+            <div><span className="font-bold text-gray-500">状态：</span> {info.text}</div>
           </div>
         </div>
 
-        {/* Original Image */}
+        {/* 原创画作 */}
         <section className="bg-white rounded-3xl shadow-xl p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">{'\ud83d\udcf7'} Student Original Drawing</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4">📷 学生原创画作</h2>
           {project.original_image_url ? (
-            <img src={project.original_image_url} alt="Original" className="max-w-full max-h-96 rounded-2xl shadow-lg mx-auto" />
+            <img src={project.original_image_url} alt="原创画作" className="max-w-full max-h-96 rounded-2xl shadow-lg mx-auto" />
           ) : (
-            <p className="text-gray-400 text-center py-8">No image uploaded</p>
+            <p className="text-gray-400 text-center py-8">暂无图片</p>
           )}
         </section>
 
-        {/* Storyboard Upload */}
+        {/* 分镜图上传 */}
         <section className="bg-white rounded-3xl shadow-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-800">{'\ud83d\udcfa'} Storyboard Image (9-grid)</h2>
+            <h2 className="text-xl font-bold text-gray-800">🎬 九宫格分镜图</h2>
             {project.storyboard_image_url && (
               <a href={project.storyboard_image_url} target="_blank" rel="noreferrer"
                 className="px-4 py-2 bg-green-100 text-green-700 rounded-xl text-sm font-bold hover:bg-green-200">
-                {'\u2197'} View
+                ↗ 查看
               </a>
             )}
           </div>
           {project.storyboard_image_url ? (
-            <img src={project.storyboard_image_url} alt="Storyboard" className="max-w-full max-h-80 rounded-2xl shadow-lg mx-auto" />
+            <img src={project.storyboard_image_url} alt="分镜图" className="max-w-full max-h-80 rounded-2xl shadow-lg mx-auto" />
           ) : (
-            <p className="text-gray-400 text-center py-4">Not yet uploaded</p>
+            <div className="w-full h-40 rounded-2xl bg-purple-50 border-2 border-dashed border-purple-200 flex items-center justify-center">
+              <p className="text-purple-400">尚未上传分镜图</p>
+            </div>
           )}
           <div className="mt-4 flex gap-3 justify-center">
             <input type="file" accept="image/*" ref={(el) => setSbFileInput(el)}
@@ -176,26 +178,28 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
             <button onClick={() => sbFileInput?.click()} disabled={uploadingStoryboard}
               className={'px-6 py-3 rounded-xl font-bold text-white transition-colors ' +
                 (uploadingStoryboard ? 'bg-gray-400 cursor-wait' : 'bg-purple-500 hover:bg-purple-600')}>
-              {uploadingStoryboard ? 'Uploading...' : '{\'\ud83d\udcce\'} Upload Storyboard'}
+              {uploadingStoryboard ? '上传中...' : '📎 上传分镜图'}
             </button>
           </div>
         </section>
 
-        {/* Video Upload */}
+        {/* 视频上传 */}
         <section className="bg-white rounded-3xl shadow-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-800">{'\ud83c\udfac'} Animation Video</h2>
+            <h2 className="text-xl font-bold text-gray-800">🎥 动画视频</h2>
             {project.video_url && (
               <a href={project.video_url} target="_blank" rel="noreferrer"
                 className="px-4 py-2 bg-green-100 text-green-700 rounded-xl text-sm font-bold hover:bg-green-200">
-                {'\u2197'} View / Download
+                ↗ 查看 / 下载
               </a>
             )}
           </div>
           {project.video_url ? (
             <video src={project.video_url} controls className="w-full max-h-80 rounded-2xl shadow-lg mx-auto" />
           ) : (
-            <p className="text-gray-400 text-center py-4">Not yet uploaded</p>
+            <div className="w-full h-40 rounded-2xl bg-orange-50 border-2 border-dashed border-orange-200 flex items-center justify-center">
+              <p className="text-orange-400">尚未上传视频</p>
+            </div>
           )}
           <div className="mt-4 flex gap-3 justify-center">
             <input type="file" accept="video/*" ref={(el) => setVidFileInput(el)}
@@ -204,14 +208,14 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
             <button onClick={() => vidFileInput?.click()} disabled={uploadingVideo}
               className={'px-6 py-3 rounded-xl font-bold text-white transition-colors ' +
                 (uploadingVideo ? 'bg-gray-400 cursor-wait' : 'bg-orange-500 hover:bg-orange-600')}>
-              {uploadingVideo ? 'Uploading...' : '{\'\ud83d\udcce\'} Upload Video'}
+              {uploadingVideo ? '上传中...' : '📎 上传视频'}
             </button>
           </div>
         </section>
 
-        {/* Status Control */}
+        {/* 状态控制 */}
         <section className="bg-white rounded-3xl shadow-xl p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">{'\u2699\ufe0f'} Update Status</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4">⚙️ 更新状态</h2>
           <div className="flex gap-3 flex-wrap">
             {(['pending', 'processing', 'completed'] as const).map((s) => (
               <button key={s} onClick={() => updateStatus(s)}
@@ -223,19 +227,19 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
           </div>
         </section>
 
-        {/* Export History */}
+        {/* 导出记录 */}
         {logs.length > 0 && (
           <section className="bg-white rounded-3xl shadow-xl p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">{'\ud83d\udccb'} Export History</h2>
+            <h2 className="text-xl font-bold text-gray-800 mb-4">📋 操作记录</h2>
             <div className="space-y-2">
               {logs.map((log) => (
                 <div key={log.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl text-sm">
                   <div>
-                    <span className="font-bold">{log.format}</span>
-                    <span className="text-gray-400 ml-2">by {log.teacher_id}</span>
+                    <span className="font-bold">{log.format === 'storyboard' ? '九宫格分镜图' : '动画视频'}</span>
+                    <span className="text-gray-400 ml-2">操作人：{log.teacher_id}</span>
                   </div>
-                  <span className="text-gray-400">{new Date(log.created_at).toLocaleString()}</span>
-                  <a href={log.file_url} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">View</a>
+                  <span className="text-gray-400">{new Date(log.created_at).toLocaleString('zh-CN')}</span>
+                  <a href={log.file_url} target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">查看</a>
                 </div>
               ))}
             </div>

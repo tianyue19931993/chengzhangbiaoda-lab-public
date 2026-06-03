@@ -17,10 +17,10 @@ interface Project {
 }
 
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
-  pending:    { text: '\u23f3 Pending',     color: 'bg-yellow-100 text-yellow-700' },
-  processing: { text: '\u2699\ufe0f Processing', color: 'bg-blue-100 text-blue-700' },
-  completed:  { text: '\u2705 Completed',  color: 'bg-green-100 text-green-700' },
-  failed:     { text: '\u274c Failed',     color: 'bg-red-100 text-red-700' },
+  pending:    { text: '⏳ 等待处理',     color: 'bg-yellow-100 text-yellow-700' },
+  processing: { text: '⚙️ 处理中',       color: 'bg-blue-100 text-blue-700' },
+  completed:  { text: '✅ 已完成',        color: 'bg-green-100 text-green-700' },
+  failed:     { text: '❌ 失败',          color: 'bg-red-100 text-red-700' },
 };
 
 export default function MyWorksPage() {
@@ -36,7 +36,7 @@ export default function MyWorksPage() {
       const data = await res.json();
       if (data.success) setProjects(data.data.projects);
     } catch (e) {
-      console.error('Failed to load', e);
+      console.error('加载失败', e);
     } finally {
       setLoading(false);
     }
@@ -44,8 +44,8 @@ export default function MyWorksPage() {
 
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
-      <div className="text-6xl animate-bounce mb-4">{'\u23f3'}</div>
-      <p className="text-2xl text-purple-600 font-bold">Loading...</p>
+      <div className="text-6xl animate-bounce mb-4">⏳</div>
+      <p className="text-2xl text-purple-600 font-bold">加载中...</p>
     </div>
   );
 
@@ -53,17 +53,17 @@ export default function MyWorksPage() {
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl md:text-5xl font-bold text-center text-purple-600 mb-8 md:mb-12">
-          {'\ud83d\udcfa'} My Works
+          📺 我的作品
         </h1>
 
         {projects.length === 0 ? (
           <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12 text-center">
-            <div className="text-6xl md:text-8xl mb-4">{'\ud83c\udfa8'}</div>
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">No works yet</h2>
-            <p className="text-lg text-gray-600 mb-8">Upload your first creative drawing!</p>
+            <div className="text-6xl md:text-8xl mb-4">🎨</div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4">还没有作品</h2>
+            <p className="text-lg text-gray-600 mb-8">快来上传你的第一幅创意画吧！</p>
             <Link href="/upload">
               <KidButton className="bg-gradient-to-r from-pink-400 to-purple-400 text-white text-xl">
-                {'\ud83d\ude80'} Start Creating
+                🚀 开始创作
               </KidButton>
             </Link>
           </div>
@@ -78,12 +78,12 @@ export default function MyWorksPage() {
                       {p.original_image_url ? (
                         <img src={p.original_image_url} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <div className="text-7xl opacity-40">{'\ud83c\udfa8'}</div>
+                        <div className="text-7xl opacity-40">🎨</div>
                       )}
                     </div>
                     <div className="p-4 md:p-6">
                       <h3 className="text-lg font-bold text-gray-800 mb-2 truncate">
-                        {p.project_name || 'Untitled'}
+                        {p.project_name || '未命名'}
                       </h3>
                       <div className="flex items-center justify-between mb-2">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${info.color}`}>
@@ -92,7 +92,7 @@ export default function MyWorksPage() {
                         <span className="text-gray-400 text-xs">{p.style_name ?? p.style_id}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-purple-600 text-sm font-bold">{'\ud83d\udc67'} {p.child_name}</span>
+                        <span className="text-purple-600 text-sm font-bold">👦 {p.child_name}</span>
                         <span className="text-gray-400 text-xs">{formatDate(p.created_at)}</span>
                       </div>
                     </div>
@@ -105,7 +105,7 @@ export default function MyWorksPage() {
 
         <div className="mt-8 md:mt-12 text-center">
           <Link href="/">
-            <KidButton className="bg-gray-400 text-white text-sm px-4 py-2 md:px-6 md:py-3">{'\u2190'} Home</KidButton>
+            <KidButton className="bg-gray-400 text-white text-sm px-4 py-2 md:px-6 md:py-3">← 返回首页</KidButton>
           </Link>
         </div>
       </div>
