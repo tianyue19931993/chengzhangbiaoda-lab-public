@@ -122,6 +122,11 @@ export default function TeacherPage() {
     });
   }, [projects, statusFilter, nameSearch]);
 
+  // 只打包待处理的作品（pending + 有原图）
+  const pendingProjects = useMemo(() => {
+    return projects.filter(p => p.status === 'pending' && p.original_image_url);
+  }, [projects]);
+
   const stats = useMemo(() => ({
     all: projects.length,
     pending: projects.filter(p => p.status === 'pending').length,
@@ -130,12 +135,17 @@ export default function TeacherPage() {
   }), [projects]);
 
   const downloadableCount = filteredProjects.filter(p => p.original_image_url).length;
+  const pendingDownloadCount = pendingProjects.length;
 
   const handleBatchDownload = () => {
     if (downloading) return;
-    if (!confirm(`即将下载 ${downloadableCount} 张原图并打包，请稍候...`)) return;
+    if (pendingDownloadCount === 0) {
+      alert('目前没有待处理的作品');
+      return;
+    }
+    if (!confirm(`即将下载 ${pendingDownloadCount} 张待处理作品的原图并打包，请稍候...`)) return;
     setDownloading(true);
-    batchDownloadZip(filteredProjects, setDownloadProgress)
+    batchDownloadZip(pendingProjects, setDownloadProgress)
       .finally(() => setDownloading(false));
   };
 
@@ -161,9 +171,9 @@ export default function TeacherPage() {
                 </div>
               </div>
             ) : (
-              <button onClick={handleBatchDownload} disabled={downloadableCount === 0}
+              <button onClick={handleBatchDownload} disabled={pendingDownloadCount === 0}
                 className="px-4 py-3 bg-green-500 text-white rounded-2xl font-bold hover:bg-green-600 shadow text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                📥 批量下载原图 ({downloadableCount})
+                📥 批量下载待处理 ({pendingDownloadCount})
               </button>
             )}
             <Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-orange-700 hover:bg-white shadow text-sm">← 返回首页</Link>
