@@ -45,7 +45,7 @@ async function downloadUrl(url: string, filename: string) {
 async function downloadOriginal(project: Project) {
   if (!project.original_image_url) return;
   const styleName = STYLE_NAMES[project.style_id] ?? project.style_id;
-  const filename = `${project.child_name}_原图_${styleName}.jpg`;
+  const filename = `${project.child_name}_${project.project_name || '未命名'}_${styleName}.jpg`;
   const { blob } = await downloadUrl(project.original_image_url, filename);
   const blobUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -240,25 +240,13 @@ export default function TeacherPage() {
                     ) : (
                       <div className="text-7xl opacity-40">🎨</div>
                     )}
-                    {/* 操作按钮组 */}
+                    {/* 操作按钮组 - 只保留原图下载 */}
                     <div className="absolute top-2 right-2 flex flex-col gap-1">
                       {p.original_image_url && (
                         <button onClick={() => downloadOriginal(p)}
                           className="px-2.5 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-green-700 hover:bg-white shadow flex items-center gap-1">
                           📥 原图
                         </button>
-                      )}
-                      {p.storyboard_image_url && (
-                        <a href={p.storyboard_image_url} download
-                          className="px-2.5 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-purple-700 hover:bg-white shadow flex items-center gap-1">
-                          🎬 分镜
-                        </a>
-                      )}
-                      {p.video_url && (
-                        <a href={p.video_url} download
-                          className="px-2.5 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-orange-700 hover:bg-white shadow flex items-center gap-1">
-                          🎥 视频
-                        </a>
                       )}
                     </div>
                   </div>
