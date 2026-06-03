@@ -67,7 +67,7 @@ function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: Selecte
           <p className="text-purple-500">请先找到你的名字</p>
         </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); searchUsers(nameInput.trim()); }} className="bg-white rounded-3xl shadow-xl p-6 mb-6">
+        <form onSubmit={(e: React.FormEvent) => { e.preventDefault(); searchUsers(nameInput.trim()); }} className="bg-white rounded-3xl shadow-xl p-6 mb-6">
           <div className="flex gap-2">
             <input type="text" value={nameInput} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNameInput(e.target.value)}
               placeholder="输入你的名字搜索..."
