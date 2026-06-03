@@ -100,7 +100,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [error, setError] = useState('');
   const [projectId, setProjectId] = useState('');
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
-  const [showSaveModal, setShowSaveModal] = useState(false);
   const [currentStudent, setCurrentStudent] = useState<SelectedStudent | null>(null);
   const [notOwner, setNotOwner] = useState(false);
 
@@ -246,23 +245,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           {project.video_url ? (
             <div>
               <video src={project.video_url} controls playsInline className="w-full rounded-2xl shadow-lg mx-auto" />
-              <div className="mt-4 flex flex-col gap-3">
-                <button
-                  onClick={() => setShowSaveModal(true)}
-                  className="w-full py-4 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-2xl font-bold text-lg shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-                >
-                  📱 保存到手机相册
-                </button>
+              <div className="mt-4">
                 <a
                   href={project.video_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block text-center py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold text-sm hover:bg-gray-200 transition-colors"
+                  className="block w-full py-4 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-2xl font-bold text-lg shadow-lg hover:opacity-90 transition-opacity text-center"
                 >
-                  在新窗口打开视频 ↗
+                  📱 保存到手机相册
                 </a>
+                <p className="text-center text-gray-400 text-xs mt-3">💡 新页面打开视频后，长按视频画面即可保存到相册</p>
               </div>
-              <p className="text-center text-gray-400 text-xs mt-3">💡 点击上方按钮查看保存教程</p>
             </div>
           ) : (
             <div className="w-full max-h-80 rounded-2xl bg-gradient-to-br from-orange-50 to-red-50 border-4 border-dashed border-orange-200 flex flex-col items-center justify-center mx-auto">
@@ -282,52 +275,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       </div>
 
-      {/* 保存到相册教程弹窗 */}
-      {showSaveModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-end justify-center md:items-center p-4" onClick={() => setShowSaveModal(false)}>
-          <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-lg p-6 md:p-8 space-y-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-gray-800">📱 保存到手机相册</h3>
-              <button onClick={() => setShowSaveModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-                ❌
-              </button>
-            </div>
 
-            {/* iOS 教程 */}
-            <div className="space-y-4">
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4">
-                <p className="font-bold text-blue-800 mb-2">🍎 苹果手机 (iPhone/iPad)</p>
-                <div className="space-y-2 text-sm text-blue-700">
-                  <p>1️⃣ 点击上方「在新窗口打开视频」</p>
-                  <p>2️⃣ 视频打开后，点击底部的「分享」按钮</p>
-                  <p>3️⃣ 在分享菜单中选择「保存视频」</p>
-                  <p>4️⃣ 视频就会保存到你的相册啦！🎉</p>
-                </div>
-              </div>
-
-              <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4">
-                <p className="font-bold text-green-800 mb-2">🤖 安卓手机</p>
-                <div className="space-y-2 text-sm text-green-700">
-                  <p>1️⃣ 点击上方「在新窗口打开视频」</p>
-                  <p>2️⃣ 视频打开后，长按视频</p>
-                  <p>3️⃣ 选择「保存到相册」或「下载」</p>
-                  <p>4️⃣ 视频就会保存到你的相册啦！🎉</p>
-                </div>
-              </div>
-            </div>
-
-            <a
-              href={project?.video_url}
-              target="_blank"
-              rel="noreferrer"
-              className="block w-full py-4 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-2xl font-bold text-lg shadow-lg hover:opacity-90 transition-opacity text-center"
-              onClick={() => setShowSaveModal(false)}
-            >
-              好的，打开视频 →
-            </a>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
