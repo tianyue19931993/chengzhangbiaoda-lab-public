@@ -58,9 +58,9 @@ export default function UploadPage() {
       .then(data => {
         if (data.success && data.data?.styles?.length) {
           setStyles(data.data.styles);
-          if (data.data.styles.length > 0) {
-            setSelectedStyle(data.data.styles[0].id);
-          }
+          // 强制默认 pixar（如果存在），否则用第一个
+          const hasPixar = data.data.styles.find((s: any) => s.id === 'pixar');
+          setSelectedStyle(hasPixar ? 'pixar' : data.data.styles[0].id);
         }
       })
       .catch(() => {
@@ -99,7 +99,7 @@ export default function UploadPage() {
       formData.append('styleId', selectedStyle);
       formData.append('userId', selectedStudent.id);
 
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const res = await fetch('/api/upload', { method: 'POST', body: formData, signal: AbortSignal.timeout(25000) });
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? '上传失败');
 
