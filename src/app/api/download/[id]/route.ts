@@ -11,10 +11,10 @@ export async function GET(
   try {
     const { id } = await params;
 
-    // 1. 从数据库获取视频 URL
+    // 1. 从数据库获取视频 URL（JOIN users 表获取名字）
     const { data: project, error } = await supabaseAdmin
       .from('projects')
-      .select('video_url, user_name')
+      .select('video_url, users(name)')
       .eq('id', id)
       .single();
 
@@ -30,7 +30,9 @@ export async function GET(
     }
 
     // 3. 构建文件名
-    const safeName = (project.user_name || '作品').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_]/g, '_');
+    const users: any = project.users;
+    const userName = users?.[0]?.name || users?.name || '作品';
+    const safeName = String(userName).replace(/[^a-zA-Z0-9\u4e00-\u9fa5_]/g, '_');
     const filename = `成长表达_${safeName}.mp4`;
 
     // 4. 返回文件流，设置 attachment 头（关键！这会触发微信的文件接收界面）
