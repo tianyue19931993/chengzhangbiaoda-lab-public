@@ -27,6 +27,12 @@ interface SelectedStudent {
   session_number: number;
 }
 
+const SESSION_TEXT: Record<number, string> = {
+  1: '第一场', 2: '第二场', 3: '第三场', 4: '第四场',
+  5: '第五场', 6: '第六场', 7: '第七场', 8: '第八场',
+  9: '第九场', 10: '第十场',
+};
+
 // 内嵌选人组件（用于我的作品页）
 function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: SelectedStudent) => void }) {
   const [nameInput, setNameInput] = useState('');
@@ -34,10 +40,7 @@ function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: Selecte
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SelectedStudent | null>(null);
 
-  useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    searchUsers('', today);
-  }, []);
+  // 已删除自动搜索 - 让用户主动搜索
 
   const searchUsers = async (name: string, date?: string) => {
     setLoading(true);
@@ -83,18 +86,31 @@ function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: Selecte
         {!loading && users.length > 0 && (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
             <div className="divide-y divide-gray-50">
-              {users.map(user => (
-                <button key={user.id} onClick={() => setSelectedUser(user)}
-                  className={`w-full text-left p-4 flex items-center gap-4 transition-all ${selectedUser?.id === user.id ? 'bg-purple-100' : 'hover:bg-purple-50'}`}>
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedUser?.id === user.id ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`}>
-                    {selectedUser?.id === user.id && <span className="text-white text-xs">✓</span>}
-                  </div>
-                  <div className="flex-1">
-                    <span className="text-xl font-bold text-gray-800">{user.name}</span>
-                    <p className="text-gray-500 text-sm">{user.institution}</p>
-                  </div>
-                </button>
-              ))}
+              {users.map(user => {
+                const isSelected = selectedUser?.id === user.id;
+                return (
+                  <button key={user.id} onClick={() => setSelectedUser(user)}
+                    className={`w-full text-left p-4 md:p-5 flex items-center gap-4 transition-all hover:bg-purple-50 ${isSelected ? 'bg-purple-100' : ''}`}>
+                    {/* 选择圆圈 */}
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`}>
+                      {isSelected && <span className="text-white text-xs">✓</span>}
+                    </div>
+                    {/* 信息 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xl font-bold text-gray-800">{user.name}</span>
+                        <span className="px-2 py-0.5 bg-orange-100 text-orange-600 rounded-full text-xs font-bold">
+                          {SESSION_TEXT[user.session_number] ?? user.session_number}
+                        </span>
+                      </div>
+                      <p className="text-gray-500 text-sm truncate">{user.institution}</p>
+                      <p className="text-gray-400 text-xs mt-0.5">{formatDate(user.activity_date)}</p>
+                    </div>
+                    {/* 编号 */}
+                    <div className="text-gray-300 text-xs font-mono flex-shrink-0">{user.student_code}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
