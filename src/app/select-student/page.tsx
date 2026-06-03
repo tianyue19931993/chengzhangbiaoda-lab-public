@@ -185,11 +185,10 @@ export default function SelectStudentPage() {
           </div>
         )}
 
-        {!selectedUser && (
-          <div className="mt-6 text-center">
-            <Link href="/" className="text-purple-400 text-sm hover:text-purple-600">← 返回首页</Link>
-          </div>
-        )}
+        {/* 返回首页链接 - 始终显示 */}
+        <div className="mt-6 text-center pb-4">
+          <Link href="/" className="text-purple-400 text-sm hover:text-purple-600">← 返回首页</Link>
+        </div>
       </div>
     </div>
   );
