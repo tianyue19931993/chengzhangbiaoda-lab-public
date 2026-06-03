@@ -34,9 +34,10 @@ export default function SelectStudentPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showAll, setShowAll] = useState(false); // 是否显示全部
 
-  // 初始加载全部学生（不限制日期）
+  // 初始加载当天所有学生
   useEffect(() => {
-    searchUsers('');
+    const today = new Date().toISOString().split('T')[0];
+    searchUsers('', today);
   }, []);
 
   const searchUsers = async (name: string, date?: string) => {
@@ -59,7 +60,8 @@ export default function SelectStudentPage() {
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    searchUsers(nameInput.trim(), showAll ? undefined : undefined);
+    const today = new Date().toISOString().split('T')[0];
+    searchUsers(nameInput.trim(), showAll ? undefined : today);
   };
 
   const handleSelect = (user: User) => {
