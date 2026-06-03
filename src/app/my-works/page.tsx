@@ -39,8 +39,7 @@ function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: Selecte
   const [users, setUsers] = useState<SelectedStudent[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<SelectedStudent | null>(null);
-
-  // 已删除自动搜索 - 让用户主动搜索
+  const [showAll, setShowAll] = useState(false); // 是否搜索全部日期
 
   const searchUsers = async (name: string, date?: string) => {
     setLoading(true);
@@ -61,6 +60,12 @@ function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: Selecte
     onSelected(selectedUser);
   };
 
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const today = new Date().toISOString().split('T')[0];
+    searchUsers(nameInput.trim(), showAll ? undefined : today);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
       <div className="max-w-lg mx-auto">
@@ -70,12 +75,19 @@ function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: Selecte
           <p className="text-purple-500">请先找到你的名字</p>
         </div>
 
-        <form onSubmit={(e: React.FormEvent) => { e.preventDefault(); searchUsers(nameInput.trim()); }} className="bg-white rounded-3xl shadow-xl p-6 mb-6">
+        <form onSubmit={handleNameSubmit} className="bg-white rounded-3xl shadow-xl p-6 mb-6">
           <div className="flex gap-2">
             <input type="text" value={nameInput} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNameInput(e.target.value)}
               placeholder="输入你的名字搜索..."
               className="flex-1 text-lg outline-none border-2 border-purple-200 rounded-2xl py-3 px-4 focus:border-purple-400" />
             <button type="submit" className="px-6 py-3 bg-purple-500 text-white rounded-2xl font-bold hover:bg-purple-600 shadow text-lg">🔍</button>
+          </div>
+          <div className="flex items-center gap-3 mt-3">
+            <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
+              <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)}
+                className="w-4 h-4 accent-purple-500" />
+              搜索全部日期（不限于今天）
+            </label>
           </div>
         </form>
 
