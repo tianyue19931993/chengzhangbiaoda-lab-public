@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // 视频文件可能较大，增加到 60 秒
+export const maxDuration = 60;
 
-// POST /api/teacher/projects/[id]/export - 上传文件（分镜图或视频）
+/**
+ * POST /api/teacher/projects/[id]/export
+ * 
+ * 策略：先生成签名上传 URL，让前端直接上传到 Supabase Storage，
+ * 然后再调用此接口记录数据库。
+ * 
+ * 如果文件较小（<4MB），也可以直接上传。
+ */
+
+// POST - 处理小文件直接上传 + 数据库更新
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -13,60 +22,52 @@ export async function POST(
     const { id } = await params;
     const formData = await request.formData();
     const file     = formData.get('file') as File | null;
-    const format   = (formData.get('format') as string) || 'storyboard'; // 'storyboard' | 'video'
+    const format   = (formData.get('format') as string) || 'storyboard';
     const teacherId = (formData.get('teacherId') as string) || 'system';
+    // 支持直接传入已上传的 fileUrl（客户端直传场景）
+    const existingFileUrl = (formData.get('fileUrl') as string) || '';
 
-    if (!file) {
+    if (!file && !existingFileUrl) {
       return NextResponse.json({ success: false, error: '请选择要上传的文件' }, { status: 400 });
     }
 
-    console.log(`[export] 开始上传: format=${format}, fileSize=${(file.size / 1024 / 1024).toFixed(2)}MB, fileType=${file.type}`);
-
-    // 根据格式确定存储桶
     const bucketMap: Record<string, string> = {
       storyboard: 'generated-images',
       video: 'videos',
     };
     const bucket = bucketMap[format];
     if (!bucket) {
-      return NextResponse.json({ success: false, error: '无效的格式，请使用 storyboard 或 video' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '无效的格式' }, { status: 400 });
     }
 
-    // 文件大小限制
-    const maxSize = format === 'video' ? 200 * 1024 * 1024 : 20 * 1024 * 1024; // 视频 200MB, 图片 20MB
-    if (file.size > maxSize) {
-      return NextResponse.json({ 
-        success: false, 
-        error: `文件过大：${format === 'video' ? '视频最大 200MB' : '图片最大 20MB'}` 
-      }, { status: 400 });
+    let fileUrl = existingFileUrl;
+
+    // 如果有文件且没有现成的 URL，直接上传（小文件）
+    if (file && !fileUrl) {
+      const ext = file.name.split('.').pop() ?? (format === 'video' ? 'mp4' : 'png');
+      const fileName = format + '/' + id + '-' + Date.now() + '.' + ext;
+
+      const fileBuffer = await file.arrayBuffer();
+
+      const { error: storageErr } = await supabaseAdmin.storage
+        .from(bucket)
+        .upload(fileName, fileBuffer, {
+          contentType: file.type,
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (storageErr) {
+        return NextResponse.json({ success: false, error: '文件上传失败：' + storageErr.message }, { status: 500 });
+      }
+
+      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(fileName);
+      fileUrl = urlData.publicUrl;
     }
 
-    // 上传到 Storage
-    const ext = file.name.split('.').pop() ?? (format === 'video' ? 'mp4' : 'png');
-    const fileName = format + '/' + id + '-' + Date.now() + '.' + ext;
-
-    const uploadStart = Date.now();
-    
-    // 转为 ArrayBuffer 提高传输效率
-    const fileBuffer = await file.arrayBuffer();
-    
-    const { error: storageErr } = await supabaseAdmin.storage
-      .from(bucket)
-      .upload(fileName, fileBuffer, {
-        contentType: file.type,
-        cacheControl: '3600',
-        upsert: true,
-      });
-
-    console.log(`[export] Storage 上传耗时: ${Date.now() - uploadStart}ms`);
-
-    if (storageErr) {
-      console.error('[export] Storage 错误:', storageErr);
-      return NextResponse.json({ success: false, error: '文件上传失败：' + storageErr.message }, { status: 500 });
+    if (!fileUrl) {
+      return NextResponse.json({ success: false, error: '无法获取文件URL' }, { status: 500 });
     }
-
-    const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(fileName);
-    const fileUrl = urlData.publicUrl;
 
     // 更新项目字段
     const updateField = format === 'storyboard' ? 'storyboard_image_url' : 'video_url';
@@ -76,34 +77,70 @@ export async function POST(
       .eq('id', id);
 
     if (updateErr) {
-      console.error('[export] 更新项目失败:', updateErr);
       return NextResponse.json({ success: false, error: '更新项目失败：' + updateErr.message }, { status: 500 });
     }
 
-    // 记录导出日志（非致命错误）
+    // 记录日志
     try {
-      await supabaseAdmin
-        .from('export_logs')
-        .insert({
-          project_id: id,
-          teacher_id: teacherId,
-          format,
-          file_url: fileUrl,
-        });
-    } catch (logErr: any) {
-      console.error('[export] 日志记录失败（非致命）:', logErr?.message ?? logErr);
+      await supabaseAdmin.from('export_logs').insert({
+        project_id: id,
+        teacher_id: teacherId,
+        format,
+        file_url: fileUrl,
+      });
+    } catch (_) {}
+
+    return NextResponse.json({ success: true, data: { fileUrl, format } });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message ?? '服务器错误' }, { status: 500 });
+  }
+}
+
+// GET - 获取签名上传 URL（用于大文件客户端直传）
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const format = searchParams.get('format') || 'storyboard';
+    const fileName = searchParams.get('fileName') || 'upload';
+    const contentType = searchParams.get('contentType') || 'application/octet-stream';
+
+    const bucketMap: Record<string, string> = {
+      storyboard: 'generated-images',
+      video: 'videos',
+    };
+    const bucket = bucketMap[format];
+    if (!bucket) {
+      return NextResponse.json({ success: false, error: '无效的格式' }, { status: 400 });
     }
+
+    const ext = fileName.split('.').pop() ?? (format === 'video' ? 'mp4' : 'png');
+    const path = format + '/' + id + '-' + Date.now() + '.' + ext;
+
+    const { data, error } = await supabaseAdmin.storage
+      .from(bucket)
+      .createSignedUploadUrl(path);
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    }
+
+    const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(path);
 
     return NextResponse.json({
       success: true,
-      data: { fileUrl, format },
+      data: {
+        signedUrl: data.signedUrl,
+        token: data.token,
+        path,
+        publicUrl: urlData.publicUrl,
+        bucket,
+      },
     });
   } catch (err: any) {
-    console.error('[export] 异常:', err?.message ?? err);
-    // 确保始终返回合法 JSON
-    return NextResponse.json({ 
-      success: false, 
-      error: err?.message ?? '服务器内部错误，请重试' 
-    }, { status: 500 });
+    return NextResponse.json({ success: false, error: err?.message ?? '服务器错误' }, { status: 500 });
   }
 }

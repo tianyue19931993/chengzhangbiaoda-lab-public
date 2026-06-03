@@ -33,6 +33,60 @@ const STATUS_MAP: Record<string, { text: string; color: string }> = {
   failed:     { text: '❌ 失败',          color: 'bg-red-100 text-red-700' },
 };
 
+// 上传文件到 Supabase Storage（客户端直传，绕过 Vercel 限制）
+async function uploadToSupabase(
+  projectId: string,
+  file: File,
+  format: 'storyboard' | 'video'
+): Promise<{ success: boolean; fileUrl?: string; error?: string }> {
+  try {
+    // 1. 获取签名上传 URL
+    const signedUrlRes = await fetch(
+      `/api/teacher/projects/${projectId}/export?format=${format}&fileName=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`
+    );
+    const signedData = await signedUrlRes.json();
+
+    if (!signedData.success) {
+      return { success: false, error: signedData.error || '获取上传链接失败' };
+    }
+
+    const { signedUrl, publicUrl } = signedData.data;
+
+    // 2. 直接上传到 Supabase Storage（绕过 Vercel）
+    const uploadRes = await fetch(signedUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type,
+      },
+    });
+
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text().catch(() => '上传失败');
+      return { success: false, error: errText };
+    }
+
+    // 3. 通知后端更新数据库
+    const formData = new FormData();
+    formData.append('format', format);
+    formData.append('fileUrl', publicUrl);
+
+    const notifyRes = await fetch(`/api/teacher/projects/${projectId}/export`, {
+      method: 'POST',
+      body: formData,
+    });
+    const notifyData = await notifyRes.json();
+
+    if (!notifyData.success) {
+      return { success: false, error: notifyData.error || '更新数据库失败' };
+    }
+
+    return { success: true, fileUrl: publicUrl };
+  } catch (err: any) {
+    return { success: false, error: err?.message || '上传失败' };
+  }
+}
+
 export default function TeacherProjectDetail({ params }: { params: Promise<{ id: string }> }) {
   const [project, setProject] = useState<Project | null>(null);
   const [logs, setLogs] = useState<ExportLog[]>([]);
@@ -42,6 +96,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
   // 上传状态
   const [uploadingStoryboard, setUploadingStoryboard] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [sbFileInput, setSbFileInput] = useState<HTMLInputElement | null>(null);
   const [vidFileInput, setVidFileInput] = useState<HTMLInputElement | null>(null);
 
@@ -65,19 +120,20 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
   const handleUpload = async (file: File, format: 'storyboard' | 'video') => {
     const setUploading = format === 'storyboard' ? setUploadingStoryboard : setUploadingVideo;
     setUploading(true);
+    setUploadProgress(0);
+
+    // 文件大小检查
+    const maxSize = format === 'video' ? 200 * 1024 * 1024 : 20 * 1024 * 1024;
+    if (file.size > maxSize) {
+      alert(`文件过大：${format === 'video' ? '视频最大 200MB' : '图片最大 20MB'}`);
+      setUploading(false);
+      return;
+    }
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('format', format);
+      const result = await uploadToSupabase(projectId, file, format);
 
-      const res = await fetch('/api/teacher/projects/' + projectId + '/export', {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-
-      if (data.success) {
+      if (result.success) {
         // 刷新数据
         fetch('/api/teacher/projects/' + projectId)
           .then(r => r.json())
@@ -89,12 +145,13 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
           });
         alert(format === 'storyboard' ? '分镜图上传成功！' : '视频上传成功！');
       } else {
-        alert('上传失败：' + data.error);
+        alert('上传失败：' + result.error);
       }
     } catch (e: any) {
       alert('错误：' + e.message);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -211,6 +268,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
               {uploadingVideo ? '上传中...' : '📎 上传视频'}
             </button>
           </div>
+          <p className="text-center text-gray-400 text-sm mt-2">支持最大 200MB 的视频文件</p>
         </section>
 
         {/* 状态控制 */}
