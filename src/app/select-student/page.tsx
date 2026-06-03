@@ -34,11 +34,7 @@ export default function SelectStudentPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showAll, setShowAll] = useState(false); // 是否显示全部
 
-  // 初始加载当天所有学生
-  useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
-    searchUsers('', today);
-  }, []);
+  // 不再默认加载全部学生，让用户搜索
 
   const searchUsers = async (name: string, date?: string) => {
     setLoading(true);
@@ -77,7 +73,7 @@ export default function SelectStudentPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
-      <div className="max-w-lg mx-auto">
+      <div className={"max-w-lg mx-auto " + (selectedUser ? 'pb-24' : '')}>
         {/* 顶部 */}
         <div className="text-center mb-8">
           <div className="text-6xl mb-4">🎒</div>
@@ -189,9 +185,11 @@ export default function SelectStudentPage() {
           </div>
         )}
 
-        <div className="mt-6 text-center">
-          <Link href="/" className="text-purple-400 text-sm hover:text-purple-600">← 返回首页</Link>
-        </div>
+        {!selectedUser && (
+          <div className="mt-6 text-center">
+            <Link href="/" className="text-purple-400 text-sm hover:text-purple-600">← 返回首页</Link>
+          </div>
+        )}
       </div>
     </div>
   );
