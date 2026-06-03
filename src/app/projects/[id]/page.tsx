@@ -102,7 +102,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [currentStudent, setCurrentStudent] = useState<SelectedStudent | null>(null);
   const [notOwner, setNotOwner] = useState(false);
-  const [showCopyModal, setShowCopyModal] = useState(false); // 复制链接弹窗
 
   useEffect(() => { params.then(({ id }) => setProjectId(id)); }, [params]);
 
@@ -134,41 +133,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   // ESC 关闭
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') { setViewerSrc(null); setShowCopyModal(false); } };
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setViewerSrc(null); };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // 检测是否在微信环境
-  const isWechat = () => {
-    return /MicroMessenger/i.test(navigator.userAgent);
-  };
-
-  // 打开视频（智能判断环境）
+  // 打开视频 - 直接跳转到系统浏览器
   const handleOpenVideo = () => {
     if (!project?.video_url) return;
-    
-    if (isWechat()) {
-      // 微信环境：显示复制链接弹窗，引导用户用 Safari 打开
-      setShowCopyModal(true);
-    } else {
-      // 非微信环境：直接跳转到系统浏览器
-      window.location.href = project.video_url;
-    }
-  };
-
-  // 复制链接到剪贴板
-  const copyVideoUrl = async () => {
-    if (!project?.video_url) return;
-    try {
-      await navigator.clipboard.writeText(project.video_url);
-      alert('✅ 链接已复制！\n请打开手机自带的「Safari 浏览器」，粘贴地址访问视频，长按即可保存到相册');
-      setShowCopyModal(false);
-    } catch {
-      // 降级方案：显示链接让用户手动复制
-      prompt('请复制以下链接，打开 Safari 浏览器访问：', project.video_url);
-      setShowCopyModal(false);
-    }
+    window.location.href = project.video_url;
   };
 
   if (loading) return (
@@ -305,49 +278,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
       </div>
-
-      {/* 微信环境：复制链接弹窗 */}
-      {showCopyModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-end justify-center md:items-center p-4" onClick={() => setShowCopyModal(false)}>
-          <div className="bg-white rounded-t-3xl md:rounded-3xl w-full max-w-lg p-6 md:p-8 space-y-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-gray-800">📱 保存到手机相册</h3>
-              <button onClick={() => setShowCopyModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
-                ❌
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4">
-                <p className="font-bold text-green-800 mb-3">🍎 苹果手机保存教程</p>
-                <div className="space-y-3 text-sm text-green-700">
-                  <p>1️⃣ 点击下方「复制链接」按钮</p>
-                  <p>2️⃣ 打开手机自带的<strong>「Safari 浏览器」</strong></p>
-                  <p>3️⃣ 在地址栏<strong>长按粘贴</strong>链接</p>
-                  <p>4️⃣ 视频播放后，<strong>长按视频画面</strong></p>
-                  <p>5️⃣ 选择<strong>「存储到“照片”」</strong></p>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4">
-                <p className="font-bold text-blue-800 mb-2">💡 为什么需要这样操作？</p>
-                <p className="text-sm text-blue-700">微信内置浏览器对视频有限制，无法直接保存。使用 Safari 可以正常长按保存视频到相册。</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <button onClick={copyVideoUrl}
-                className="w-full py-4 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-2xl font-bold text-lg shadow-lg hover:opacity-90 transition-opacity">
-                📋 复制视频链接
-              </button>
-              <button onClick={() => setShowCopyModal(false)}
-                className="w-full py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold hover:bg-gray-200 transition-colors">
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
