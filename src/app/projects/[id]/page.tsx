@@ -138,23 +138,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // 下载视频文件
+  // 下载视频文件（通过后端代理，触发微信文件接收界面）
   const handleDownload = () => {
-    if (!project?.video_url) return;
+    if (!project?.id) return;
     
-    // 创建下载链接
-    const link = document.createElement('a');
-    link.href = project.video_url;
-    link.download = `成长表达视频_${project.id || '作品'}.mp4`;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // 提示用户：微信会自动打开文件接收界面
-    setTimeout(() => {
-      alert('✅ 视频已开始下载！\n\n在微信中，文件会自动打开，点击右上角可分享给好友或文件传输助手');
-    }, 1000);
+    // 跳转到后端代理下载 API（设置 Content-Disposition: attachment）
+    window.location.href = `/api/download/${project.id}`;
   };
 
   if (loading) return (
@@ -271,7 +260,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 >
                   📥 下载视频
                 </button>
-                <p className="text-center text-gray-400 text-xs mt-3">💡 下载后可通过右上角分享给好友或文件传输助手</p>
+                <p className="text-center text-gray-400 text-xs mt-3">💡 下载后点右上角可分享给好友或文件传输助手</p>
               </div>
             </div>
           ) : (
