@@ -144,16 +144,17 @@ export default function MyWorksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<SelectedStudent | null>(null);
-  const [redirecting, setRedirecting] = useState(true);
+  const [loadingStudent, setLoadingStudent] = useState(true); // 正在读取 sessionStorage
 
   useEffect(() => {
     const stored = sessionStorage.getItem('selected_student');
     if (!stored) {
-      setRedirecting(false);
+      setLoadingStudent(false);
       return;
     }
     const student: SelectedStudent = JSON.parse(stored);
     setSelectedStudent(student);
+    setLoadingStudent(false);
     loadProjects(student.id);
   }, []);
 
@@ -178,7 +179,7 @@ export default function MyWorksPage() {
     }
   };
 
-  if (redirecting) {
+  if (loadingStudent) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
         <div className="text-6xl animate-bounce mb-4">🎨</div>
@@ -188,7 +189,7 @@ export default function MyWorksPage() {
   }
 
   // 没有选过名字，显示选名字界面（内嵌在当前页面）
-  if (!selectedStudent && !redirecting) {
+  if (!selectedStudent) {
     return <EmbeddedStudentSelector onSelected={(student) => {
       setSelectedStudent(student);
       loadProjects(student.id);
