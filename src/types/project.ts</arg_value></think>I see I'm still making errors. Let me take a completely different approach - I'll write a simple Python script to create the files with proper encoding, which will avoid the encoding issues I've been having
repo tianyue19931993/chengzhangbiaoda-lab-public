@@ -1,0 +1,23 @@
+// Project types V3 - Collection Platform (aligned with DB schema)
+
+export type ProjectStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface Project {
+ id: string;
+  child_name:string;
+  project_name:string;
+  style_id?: string;  
+  original_image_url?:string;
+  
+  
+  storyboard_image_url?:string;
+  
+  
+  video_url?:string;
+  
+  
+  status: ProjectStatus;
+  
+  submitted_at?:string;
+  processing_at?:string;
+ }

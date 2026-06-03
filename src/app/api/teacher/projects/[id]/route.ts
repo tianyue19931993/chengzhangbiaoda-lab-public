@@ -3,14 +3,13 @@ import { supabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
-// GET /api/projects/[id]
+// GET /api/teacher/projects/[id] - project detail for teacher
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-
     const { data: project, error } = await supabaseAdmin
       .from('projects')
       .select('*, styles(name)')
@@ -21,18 +20,26 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
     }
 
-    const result = {
-      ...project,
-      style_name: project.styles?.name ?? null,
-    };
+    // Get export logs
+    const { data: logs } = await supabaseAdmin
+      .from('export_logs')
+      .select('*')
+      .eq('project_id', id)
+      .order('created_at', { ascending: false });
 
-    return NextResponse.json({ success: true, data: { project: result } });
+    return NextResponse.json({
+      success: true,
+      data: {
+        project: { ...project, style_name: project.styles?.name ?? null },
+        export_logs: logs ?? [],
+      },
+    });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 
-// PATCH /api/projects/[id]
+// PATCH /api/teacher/projects/[id] - teacher updates (status, storyboard_image_url, video_url)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -45,11 +52,14 @@ export async function PATCH(
     if (body.status !== undefined) updates.status = body.status;
     if (body.storyboard_image_url !== undefined) updates.storyboard_image_url = body.storyboard_image_url;
     if (body.video_url !== undefined) updates.video_url = body.video_url;
-    if (body.downloaded_at !== undefined) updates.downloaded_at = body.downloaded_at;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
+
+    // Auto-set processing/completed timestamps
+    if (updates.status === 'processing') updates.processing_at = new Date().toISOString();
+    if (updates.status === 'completed') updates.completed_at = new Date().toISOString();
 
     const { data: project, error } = await supabaseAdmin
       .from('projects')
@@ -60,21 +70,6 @@ export async function PATCH(
 
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     return NextResponse.json({ success: true, data: { project } });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
-  }
-}
-
-// DELETE /api/projects/[id]
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const { error } = await supabaseAdmin.from('projects').delete().eq('id', id);
-    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    return NextResponse.json({ success: true, data: { message: 'Deleted' } });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
