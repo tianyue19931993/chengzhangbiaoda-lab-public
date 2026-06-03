@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 interface Project {
   id: string;
@@ -32,77 +34,58 @@ const STYLE_NAMES: Record<string, string> = {
   cyberpunk: '赛博朋克',
 };
 
-// 通用下载函数（通过 fetch blob 解决跨域下载问题）
+// 下载单个文件
 async function downloadUrl(url: string, filename: string) {
-  if (!url) return;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('请求失败');
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    // 延迟释放 blob URL
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-  } catch (err) {
-    // 降级：新窗口打开
-    window.open(url, '_blank');
-  }
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return { blob, filename };
 }
 
-// 下载单个原图
-function downloadOriginal(project: Project) {
+// 单个下载
+async function downloadOriginal(project: Project) {
   if (!project.original_image_url) return;
   const styleName = STYLE_NAMES[project.style_id] ?? project.style_id;
   const filename = `${project.child_name}_原图_${styleName}.jpg`;
-  downloadUrl(project.original_image_url, filename);
+  const { blob } = await downloadUrl(project.original_image_url, filename);
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 }
 
-// 下载分镜图
-function downloadStoryboard(project: Project) {
-  if (!project.storyboard_image_url) return;
-  const styleName = STYLE_NAMES[project.style_id] ?? project.style_id;
-  const filename = `${project.child_name}_九宫格分镜_${styleName}.jpg`;
-  downloadUrl(project.storyboard_image_url, filename);
-}
-
-// 下载视频
-function downloadVideo(project: Project) {
-  if (!project.video_url) return;
-  const filename = `${project.child_name}_动画视频_${STYLE_NAMES[project.style_id] ?? project.style_id}.mp4`;
-  downloadUrl(project.video_url, filename);
-}
-
-// 批量下载原图（通过 fetch blob 方式）
-async function batchDownloadOriginals(projects: Project[]) {
+// 批量打包下载原图
+async function batchDownloadZip(projects: Project[], setProgress: (n: number) => void) {
   const withImages = projects.filter(p => p.original_image_url);
   if (withImages.length === 0) {
     alert('没有可下载的原图');
     return;
   }
-  if (!confirm(`即将下载 ${withImages.length} 张原图，请稍候...`)) return;
-  for (const p of withImages) {
-    downloadOriginal(p);
-    await new Promise(resolve => setTimeout(resolve, 600));
-  }
-}
 
-// 批量下载分镜图
-async function batchDownloadStoryboards(projects: Project[]) {
-  const withImages = projects.filter(p => p.storyboard_image_url);
-  if (withImages.length === 0) {
-    alert('没有可下载的分镜图');
-    return;
+  const zip = new JSZip();
+  const folder = zip.folder('原图批量下载');
+
+  for (let i = 0; i < withImages.length; i++) {
+    const p = withImages[i];
+    setProgress(Math.round((i + 1) / withImages.length * 100));
+    const styleName = STYLE_NAMES[p.style_id] ?? p.style_id;
+    const filename = `${p.child_name}_${p.project_name || '未命名'}_${styleName}.jpg`;
+    try {
+      const response = await fetch(p.original_image_url!);
+      const blob = await response.blob();
+      folder?.file(filename, blob);
+    } catch (err) {
+      console.warn(`下载失败: ${filename}`, err);
+    }
   }
-  if (!confirm(`即将下载 ${withImages.length} 张分镜图，请稍候...`)) return;
-  for (const p of withImages) {
-    downloadStoryboard(p);
-    await new Promise(resolve => setTimeout(resolve, 600));
-  }
+
+  setProgress(100);
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  saveAs(zipBlob, `原图批量下载_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.zip`);
+  setProgress(0);
 }
 
 export default function TeacherPage() {
@@ -111,6 +94,8 @@ export default function TeacherPage() {
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [nameSearch, setNameSearch] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   useEffect(() => { loadAllProjects(); }, []);
 
@@ -144,6 +129,16 @@ export default function TeacherPage() {
     completed: projects.filter(p => p.status === 'completed').length,
   }), [projects]);
 
+  const downloadableCount = filteredProjects.filter(p => p.original_image_url).length;
+
+  const handleBatchDownload = () => {
+    if (downloading) return;
+    if (!confirm(`即将下载 ${downloadableCount} 张原图并打包，请稍候...`)) return;
+    setDownloading(true);
+    batchDownloadZip(filteredProjects, setDownloadProgress)
+      .finally(() => setDownloading(false));
+  };
+
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-orange-100 to-red-100">
       <div className="text-6xl animate-bounce mb-4">⏳</div>
@@ -156,15 +151,21 @@ export default function TeacherPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
           <h1 className="text-3xl md:text-5xl font-bold text-orange-600">👨‍🏫 老师工作台</h1>
-          <div className="flex gap-3 flex-wrap">
-            <button onClick={() => batchDownloadOriginals(filteredProjects)}
-              className="px-4 py-3 bg-green-500 text-white rounded-2xl font-bold hover:bg-green-600 shadow text-sm flex items-center gap-2">
-              📥 批量下载原图 ({filteredProjects.filter(p => p.original_image_url).length})
-            </button>
-            <button onClick={() => batchDownloadStoryboards(filteredProjects)}
-              className="px-4 py-3 bg-purple-500 text-white rounded-2xl font-bold hover:bg-purple-600 shadow text-sm flex items-center gap-2">
-              🎬 批量下载分镜 ({filteredProjects.filter(p => p.storyboard_image_url).length})
-            </button>
+          <div className="flex gap-3 items-center flex-wrap">
+            {downloading ? (
+              <div className="flex items-center gap-3 px-4 py-3 bg-green-500 text-white rounded-2xl shadow text-sm font-bold">
+                <span className="animate-spin">⏳</span>
+                打包中... {downloadProgress}%
+                <div className="w-24 h-2 bg-white/30 rounded-full overflow-hidden">
+                  <div className="h-full bg-white rounded-full transition-all duration-300" style={{ width: downloadProgress + '%' }} />
+                </div>
+              </div>
+            ) : (
+              <button onClick={handleBatchDownload} disabled={downloadableCount === 0}
+                className="px-4 py-3 bg-green-500 text-white rounded-2xl font-bold hover:bg-green-600 shadow text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                📥 批量下载原图 ({downloadableCount})
+              </button>
+            )}
             <Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-orange-700 hover:bg-white shadow text-sm">← 返回首页</Link>
           </div>
         </div>
@@ -248,16 +249,16 @@ export default function TeacherPage() {
                         </button>
                       )}
                       {p.storyboard_image_url && (
-                        <button onClick={() => downloadStoryboard(p)}
+                        <a href={p.storyboard_image_url} download
                           className="px-2.5 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-purple-700 hover:bg-white shadow flex items-center gap-1">
                           🎬 分镜
-                        </button>
+                        </a>
                       )}
                       {p.video_url && (
-                        <button onClick={() => downloadVideo(p)}
+                        <a href={p.video_url} download
                           className="px-2.5 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-orange-700 hover:bg-white shadow flex items-center gap-1">
                           🎥 视频
-                        </button>
+                        </a>
                       )}
                     </div>
                   </div>

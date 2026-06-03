@@ -190,10 +190,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <button
                   onClick={() => downloadUrl(project.video_url!, `${project.child_name}_动画视频.mp4`)}
                   className="px-6 py-3 bg-gradient-to-r from-orange-400 to-red-400 text-white rounded-2xl font-bold hover:opacity-90 shadow-lg text-base">
-                  📥 保存视频到本地
+                  📥 下载视频
                 </button>
               </div>
-              <p className="text-center text-gray-400 text-sm mt-2">👆 点击左上角放大 · 也可长按保存</p>
+              <p className="text-center text-gray-400 text-sm mt-2">👆 点击左上角放大 · 长按视频也可保存 · 苹果手机可点分享按钮保存到相册</p>
             </div>
           ) : (
             <div className="w-full max-h-80 rounded-2xl bg-gradient-to-br from-orange-50 to-red-50 border-4 border-dashed border-orange-200 flex flex-col items-center justify-center mx-auto">
