@@ -103,8 +103,8 @@ export default function UploadPage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? '上传失败');
 
-      // 上传成功后清除选中状态（防止重复提交）
-      setTimeout(() => router.push('/my-works'), 600);
+      // 上传成功，立即跳转到我的作品
+      router.push('/my-works');
     } catch (err: any) {
       alert('上传失败：' + err.message);
       setUploading(false);
