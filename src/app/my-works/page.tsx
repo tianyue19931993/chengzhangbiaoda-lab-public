@@ -210,10 +210,7 @@ export default function MyWorksPage() {
             <span className="px-4 py-2 bg-purple-100 rounded-2xl text-purple-700 font-bold text-sm">
               共 {allProjects.length} 件作品
             </span>
-            <Link href="/select-student" className="px-4 py-2 bg-white/60 rounded-2xl text-purple-700 text-sm font-bold hover:bg-white shadow">
-              切换名字
-            </Link>
-            <Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-purple-700 hover:bg-white shadow text-sm">← 返回首页</Link>
+<Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-purple-700 hover:bg-white shadow text-sm">← 返回首页</Link>
           </div>
         </div>
 
