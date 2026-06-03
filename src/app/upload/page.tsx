@@ -103,8 +103,8 @@ export default function UploadPage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? '上传失败');
 
-      // 上传成功，强制跳转到我的作品（使用 window.location 确保跳转）
-      window.location.href = '/my-works';
+      // 上传成功，跳转到首页
+      window.location.href = '/';
     } catch (err: any) {
       alert('上传失败：' + err.message);
       setUploading(false);

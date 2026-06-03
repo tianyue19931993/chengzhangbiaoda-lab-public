@@ -27,6 +27,100 @@ interface SelectedStudent {
   session_number: number;
 }
 
+// 内嵌选人组件（用于我的作品页）
+function EmbeddedStudentSelector({ onSelected }: { onSelected: (student: SelectedStudent) => void }) {
+  const [nameInput, setNameInput] = useState('');
+  const [users, setUsers] = useState<SelectedStudent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<SelectedStudent | null>(null);
+
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    searchUsers('', today);
+  }, []);
+
+  const searchUsers = async (name: string, date?: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (name) params.set('name', name);
+      if (date) params.set('date', date);
+      const res = await fetch(`/api/users?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) setUsers(data.data ?? []);
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  const handleConfirm = () => {
+    if (!selectedUser) return;
+    sessionStorage.setItem('selected_student', JSON.stringify(selectedUser));
+    onSelected(selectedUser);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
+      <div className="max-w-lg mx-auto">
+        <div className="text-center mb-8">
+          <div className="text-6xl mb-4">🎒</div>
+          <h1 className="text-3xl font-bold text-purple-700 mb-2">查看我的作品</h1>
+          <p className="text-purple-500">请先找到你的名字</p>
+        </div>
+
+        <form onSubmit={(e) => { e.preventDefault(); searchUsers(nameInput.trim()); }} className="bg-white rounded-3xl shadow-xl p-6 mb-6">
+          <div className="flex gap-2">
+            <input type="text" value={nameInput} onChange={e => setNameInput(e.value)}
+              placeholder="输入你的名字搜索..."
+              className="flex-1 text-lg outline-none border-2 border-purple-200 rounded-2xl py-3 px-4 focus:border-purple-400" />
+            <button type="submit" className="px-6 py-3 bg-purple-500 text-white rounded-2xl font-bold hover:bg-purple-600 shadow text-lg">🔍</button>
+          </div>
+        </form>
+
+        {loading && (
+          <div className="text-center py-8"><div className="text-4xl animate-bounce">🔍</div><p className="text-purple-500 mt-2 font-bold">搜索中...</p></div>
+        )}
+
+        {!loading && users.length > 0 && (
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+            <div className="divide-y divide-gray-50">
+              {users.map(user => (
+                <button key={user.id} onClick={() => setSelectedUser(user)}
+                  className={`w-full text-left p-4 flex items-center gap-4 transition-all ${selectedUser?.id === user.id ? 'bg-purple-100' : 'hover:bg-purple-50'}`}>
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedUser?.id === user.id ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`}>
+                    {selectedUser?.id === user.id && <span className="text-white text-xs">✓</span>}
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-xl font-bold text-gray-800">{user.name}</span>
+                    <p className="text-gray-500 text-sm">{user.institution}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {selectedUser && (
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur border-t shadow-lg">
+            <div className="max-w-lg mx-auto flex items-center gap-4">
+              <div className="flex-1">
+                <p className="font-bold text-purple-700">{selectedUser.name}</p>
+                <p className="text-gray-400 text-xs">{selectedUser.institution}</p>
+              </div>
+              <button onClick={handleConfirm} className="px-8 py-3 bg-gradient-to-r from-orange-400 to-red-400 text-white rounded-2xl font-bold text-lg shadow-lg">
+                查看我的作品 →
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-20 text-center">
+          <Link href="/" className="text-purple-400 text-sm hover:text-purple-600">← 返回首页</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 通用下载（fetch blob 方式）
 async function downloadUrl(url: string, filename: string) {
   try {
@@ -87,16 +181,12 @@ export default function MyWorksPage() {
     );
   }
 
-  if (!selectedStudent) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-8 flex flex-col items-center justify-center">
-        <div className="text-6xl mb-4">🤔</div>
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">请先选择你的名字</h2>
-        <Link href="/select-student">
-          <KidButton className="bg-purple-500 text-white text-xl px-8 py-4">去选择 →</KidButton>
-        </Link>
-      </div>
-    );
+  // 没有选过名字，显示选名字界面（内嵌在当前页面）
+  if (!selectedStudent && !redirecting) {
+    return <EmbeddedStudentSelector onSelected={(student) => {
+      setSelectedStudent(student);
+      loadProjects(student.id);
+    }} />;
   }
 
   return (
