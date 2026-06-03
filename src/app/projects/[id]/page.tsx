@@ -133,49 +133,28 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   // ESC 关闭
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') { setViewerSrc(null); setShowTip(false); } };
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setViewerSrc(null); };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  const [downloading, setDownloading] = useState(false); // 下载状态
-
-  // ESC 关闭
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') { setViewerSrc(null); setShowTip(false); } };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const [showTip, setShowTip] = useState(false); // 微信提示
 
   // 下载视频文件
-  const handleDownload = async () => {
+  const handleDownload = () => {
     if (!project?.video_url) return;
     
-    setDownloading(true);
+    // 创建下载链接
+    const link = document.createElement('a');
+    link.href = project.video_url;
+    link.download = `成长表达视频_${project.id || '作品'}.mp4`;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     
-    try {
-      // 方法1：使用 <a download> 触发下载
-      const link = document.createElement('a');
-      link.href = project.video_url;
-      link.download = `成长表达视频_${project.id || '作品'}.mp4`;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      // 显示提示
-      setTimeout(() => {
-        alert('✅ 视频已开始下载！\n\n下载完成后，您可以通过微信「文件传输助手」发送此视频');
-      }, 1000);
-    } catch (error) {
-      // 方法2：如果上面失败，显示复制链接提示
-      setShowTip(true);
-    } finally {
-      setDownloading(false);
-    }
+    // 提示用户：微信会自动打开文件接收界面
+    setTimeout(() => {
+      alert('✅ 视频已开始下载！\n\n在微信中，文件会自动打开，点击右上角可分享给好友或文件传输助手');
+    }, 1000);
   };
 
   if (loading) return (
@@ -285,21 +264,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           {project.video_url ? (
             <div>
               <video src={project.video_url} controls playsInline className="w-full rounded-2xl shadow-lg mx-auto" />
-              <div className="mt-4 space-y-3">
+              <div className="mt-4">
                 <button
                   onClick={handleDownload}
-                  disabled={downloading}
-                  className="block w-full py-4 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-2xl font-bold text-lg shadow-lg hover:opacity-90 transition-opacity text-center disabled:opacity-50"
+                  className="block w-full py-4 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-2xl font-bold text-lg shadow-lg hover:opacity-90 transition-opacity text-center"
                 >
-                  {downloading ? '⏳ 下载中...' : '📥 下载视频到手机'}
+                  📥 下载视频
                 </button>
-                <p className="text-center text-gray-400 text-xs">💡 下载后可通过「文件传输助手」发送给电脑</p>
-                <button
-                  onClick={() => setShowTip(true)}
-                  className="block w-full text-center text-sm text-blue-500 underline py-2"
-                >
-                  或者：复制视频链接
-                </button>
+                <p className="text-center text-gray-400 text-xs mt-3">💡 下载后可通过右上角分享给好友或文件传输助手</p>
               </div>
             </div>
           ) : (
@@ -320,40 +292,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
       </div>
 
-      {/* 复制链接提示 */}
-      {showTip && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setShowTip(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 text-center space-y-4" onClick={e => e.stopPropagation()}>
-            <div className="text-5xl">📋</div>
-            <h3 className="text-xl font-bold text-gray-800">复制视频链接</h3>
-            <p className="text-gray-500 text-sm leading-relaxed">
-              如果下载失败<br/>
-              可复制链接后在浏览器中打开
-            </p>
-            <div className="space-y-2">
-              <button onClick={async () => {
-                const url = project?.video_url;
-                if (!url) return;
-                try {
-                  await navigator.clipboard.writeText(url);
-                  alert('✅ 链接已复制！');
-                  setShowTip(false);
-                } catch {
-                  prompt('复制此链接：', url);
-                  setShowTip(false);
-                }
-              }}
-                className="w-full py-3 bg-blue-500 text-white rounded-2xl font-bold shadow-lg hover:opacity-90">
-                📋 复制链接
-              </button>
-              <button onClick={() => setShowTip(false)}
-                className="w-full py-2 text-gray-400 text-sm">
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
