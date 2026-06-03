@@ -32,34 +32,76 @@ const STYLE_NAMES: Record<string, string> = {
   cyberpunk: '赛博朋克',
 };
 
+// 通用下载函数（通过 fetch blob 解决跨域下载问题）
+async function downloadUrl(url: string, filename: string) {
+  if (!url) return;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('请求失败');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // 延迟释放 blob URL
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (err) {
+    // 降级：新窗口打开
+    window.open(url, '_blank');
+  }
+}
+
 // 下载单个原图
 function downloadOriginal(project: Project) {
   if (!project.original_image_url) return;
   const styleName = STYLE_NAMES[project.style_id] ?? project.style_id;
   const filename = `${project.child_name}_原图_${styleName}.jpg`;
-  const a = document.createElement('a');
-  a.href = project.original_image_url;
-  a.download = filename;
-  a.target = '_blank';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  downloadUrl(project.original_image_url, filename);
 }
 
-// 批量下载所有原图
-async function batchDownload(projects: Project[]) {
+// 下载分镜图
+function downloadStoryboard(project: Project) {
+  if (!project.storyboard_image_url) return;
+  const styleName = STYLE_NAMES[project.style_id] ?? project.style_id;
+  const filename = `${project.child_name}_九宫格分镜_${styleName}.jpg`;
+  downloadUrl(project.storyboard_image_url, filename);
+}
+
+// 下载视频
+function downloadVideo(project: Project) {
+  if (!project.video_url) return;
+  const filename = `${project.child_name}_动画视频_${STYLE_NAMES[project.style_id] ?? project.style_id}.mp4`;
+  downloadUrl(project.video_url, filename);
+}
+
+// 批量下载原图（通过 fetch blob 方式）
+async function batchDownloadOriginals(projects: Project[]) {
   const withImages = projects.filter(p => p.original_image_url);
   if (withImages.length === 0) {
     alert('没有可下载的原图');
     return;
   }
-  if (withImages.length > 10) {
-    if (!confirm(`即将下载 ${withImages.length} 张图片，是否继续？`)) return;
-  }
-  // 逐个下载（浏览器限制，无法真正批量）
+  if (!confirm(`即将下载 ${withImages.length} 张原图，请稍候...`)) return;
   for (const p of withImages) {
-    await new Promise(resolve => setTimeout(resolve, 500)); // 间隔避免被拦截
     downloadOriginal(p);
+    await new Promise(resolve => setTimeout(resolve, 600));
+  }
+}
+
+// 批量下载分镜图
+async function batchDownloadStoryboards(projects: Project[]) {
+  const withImages = projects.filter(p => p.storyboard_image_url);
+  if (withImages.length === 0) {
+    alert('没有可下载的分镜图');
+    return;
+  }
+  if (!confirm(`即将下载 ${withImages.length} 张分镜图，请稍候...`)) return;
+  for (const p of withImages) {
+    downloadStoryboard(p);
+    await new Promise(resolve => setTimeout(resolve, 600));
   }
 }
 
@@ -87,7 +129,6 @@ export default function TeacherPage() {
     }
   };
 
-  // 筛选逻辑
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       if (statusFilter && p.status !== statusFilter) return false;
@@ -96,7 +137,6 @@ export default function TeacherPage() {
     });
   }, [projects, statusFilter, nameSearch]);
 
-  // 统计
   const stats = useMemo(() => ({
     all: projects.length,
     pending: projects.filter(p => p.status === 'pending').length,
@@ -114,14 +154,18 @@ export default function TeacherPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-100 to-red-100 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
           <h1 className="text-3xl md:text-5xl font-bold text-orange-600">👨‍🏫 老师工作台</h1>
-          <div className="flex gap-3">
-            <button onClick={() => batchDownload(filteredProjects)}
-              className="px-4 py-3 bg-green-500 text-white rounded-2xl font-bold hover:bg-green-600 shadow text-sm md:text-base flex items-center gap-2">
+          <div className="flex gap-3 flex-wrap">
+            <button onClick={() => batchDownloadOriginals(filteredProjects)}
+              className="px-4 py-3 bg-green-500 text-white rounded-2xl font-bold hover:bg-green-600 shadow text-sm flex items-center gap-2">
               📥 批量下载原图 ({filteredProjects.filter(p => p.original_image_url).length})
             </button>
-            <Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-orange-700 hover:bg-white transition-colors shadow text-sm md:text-base">← 返回首页</Link>
+            <button onClick={() => batchDownloadStoryboards(filteredProjects)}
+              className="px-4 py-3 bg-purple-500 text-white rounded-2xl font-bold hover:bg-purple-600 shadow text-sm flex items-center gap-2">
+              🎬 批量下载分镜 ({filteredProjects.filter(p => p.storyboard_image_url).length})
+            </button>
+            <Link href="/" className="px-6 py-3 bg-white/60 backdrop-blur rounded-2xl font-bold text-orange-700 hover:bg-white shadow text-sm">← 返回首页</Link>
           </div>
         </div>
 
@@ -131,7 +175,7 @@ export default function TeacherPage() {
           </div>
         )}
 
-        {/* 统计卡片 - 可点击筛选 */}
+        {/* 统计卡片 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
             { key: '', label: '全部', value: stats.all, color: 'from-blue-400 to-blue-600' },
@@ -167,7 +211,6 @@ export default function TeacherPage() {
           )}
         </div>
 
-        {/* 筛选结果提示 */}
         {(statusFilter || nameSearch) && (
           <div className="text-sm text-gray-600 mb-4">
             筛选结果：{filteredProjects.length} 个项目
@@ -196,13 +239,27 @@ export default function TeacherPage() {
                     ) : (
                       <div className="text-7xl opacity-40">🎨</div>
                     )}
-                    {/* 下载原图按钮 */}
-                    {p.original_image_url && (
-                      <button onClick={() => downloadOriginal(p)}
-                        className="absolute top-2 right-2 px-3 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-green-700 hover:bg-white shadow flex items-center gap-1">
-                        📥 原图
-                      </button>
-                    )}
+                    {/* 操作按钮组 */}
+                    <div className="absolute top-2 right-2 flex flex-col gap-1">
+                      {p.original_image_url && (
+                        <button onClick={() => downloadOriginal(p)}
+                          className="px-2.5 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-green-700 hover:bg-white shadow flex items-center gap-1">
+                          📥 原图
+                        </button>
+                      )}
+                      {p.storyboard_image_url && (
+                        <button onClick={() => downloadStoryboard(p)}
+                          className="px-2.5 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-purple-700 hover:bg-white shadow flex items-center gap-1">
+                          🎬 分镜
+                        </button>
+                      )}
+                      {p.video_url && (
+                        <button onClick={() => downloadVideo(p)}
+                          className="px-2.5 py-1.5 bg-white/90 backdrop-blur rounded-xl text-xs font-bold text-orange-700 hover:bg-white shadow flex items-center gap-1">
+                          🎥 视频
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* 信息区域 */}

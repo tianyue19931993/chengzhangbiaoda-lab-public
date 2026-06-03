@@ -34,6 +34,24 @@ const STYLE_NAMES: Record<string, string> = {
   cyberpunk: '🌃 赛博朋克',
 };
 
+// 通用下载（fetch blob 方式，手机可触发保存）
+async function downloadUrl(url: string, filename: string) {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch {
+    window.open(url, '_blank');
+  }
+}
+
 // 图片查看器（纯查看，无按钮）
 function ImageViewer({ src, onClose }: { src: string; onClose: () => void }) {
   return (
@@ -151,7 +169,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div className="cursor-pointer" onClick={() => setViewerSrc(project.storyboard_image_url!)}>
               <img src={project.storyboard_image_url} alt="九宫格分镜"
                 className="max-w-full rounded-2xl shadow-lg mx-auto hover:opacity-90 transition-opacity" />
-              <p className="text-center text-gray-400 text-sm mt-2">👆 长按保存 / 点击查看大图</p>
+              <p className="text-center text-gray-400 text-sm mt-2">👆 点击查看大图 · 长按保存到本地</p>
             </div>
           ) : (
             <div className="w-full max-h-80 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 border-4 border-dashed border-purple-200 flex flex-col items-center justify-center mx-auto">
@@ -162,13 +180,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           )}
         </section>
 
-        {/* 动画视频 */}
+        {/* 动画视频 - 播放+下载 */}
         <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">🎥 动画视频</h2>
           {project.video_url ? (
             <div>
               <video src={project.video_url} controls playsInline className="w-full rounded-2xl shadow-lg mx-auto" />
-              <p className="text-center text-gray-400 text-sm mt-2">👆 点击左上角放大 · 长按保存到本地</p>
+              <div className="mt-3 flex gap-3 justify-center">
+                <button
+                  onClick={() => downloadUrl(project.video_url!, `${project.child_name}_动画视频.mp4`)}
+                  className="px-6 py-3 bg-gradient-to-r from-orange-400 to-red-400 text-white rounded-2xl font-bold hover:opacity-90 shadow-lg text-base">
+                  📥 保存视频到本地
+                </button>
+              </div>
+              <p className="text-center text-gray-400 text-sm mt-2">👆 点击左上角放大 · 也可长按保存</p>
             </div>
           ) : (
             <div className="w-full max-h-80 rounded-2xl bg-gradient-to-br from-orange-50 to-red-50 border-4 border-dashed border-orange-200 flex flex-col items-center justify-center mx-auto">
