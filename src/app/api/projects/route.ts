@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
+    const userId = searchParams.get('userId');
     const limit  = parseInt(searchParams.get('limit')  ?? '20');
     const offset = parseInt(searchParams.get('offset') ?? '0');
 
@@ -18,6 +19,7 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1);
 
     if (status) query = query.eq('status', status);
+    if (userId) query = query.eq('user_id', userId);
 
     const { data, error, count } = await query;
 

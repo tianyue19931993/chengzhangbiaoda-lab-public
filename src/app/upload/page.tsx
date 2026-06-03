@@ -14,6 +14,15 @@ interface Style {
   prompt: string;
 }
 
+interface SelectedStudent {
+  id: string;
+  student_code: string;
+  name: string;
+  institution: string;
+  activity_date: string;
+  session_number: number;
+}
+
 export default function UploadPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +35,21 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [styles, setStyles] = useState<Style[]>([]);
   const [stylesLoading, setStylesLoading] = useState(true);
+  const [selectedStudent, setSelectedStudent] = useState<SelectedStudent | null>(null);
+  const [redirecting, setRedirecting] = useState(true);
+
+  // 页面加载时：检查是否已选学生，没有则跳转选人页面
+  useEffect(() => {
+    const stored = sessionStorage.getItem('selected_student');
+    if (!stored) {
+      router.replace('/select-student');
+      return;
+    }
+    const student: SelectedStudent = JSON.parse(stored);
+    setSelectedStudent(student);
+    setChildName(student.name); // 自动填入名字
+    setRedirecting(false);
+  }, [router]);
 
   // 从数据库加载风格列表
   useEffect(() => {
@@ -34,13 +58,12 @@ export default function UploadPage() {
       .then(data => {
         if (data.success && data.data?.styles?.length) {
           setStyles(data.data.styles);
-          if (data.data.styles.length > 0 && !selectedStyle) {
+          if (data.data.styles.length > 0) {
             setSelectedStyle(data.data.styles[0].id);
           }
         }
       })
       .catch(() => {
-        // fallback：使用默认列表
         setStyles([
           { id: 'pixar', name: '🎬 Pixar 3D 动画风', prompt: '' },
           { id: 'chinese', name: '🏮 国风', prompt: '' },
@@ -65,6 +88,7 @@ export default function UploadPage() {
     if (!selectedFile) { alert('请先选择图片！'); return; }
     if (!childName.trim()) { alert('请输入小朋友的名字！'); return; }
     if (!projectName.trim()) { alert('请输入作品名称！'); return; }
+    if (!selectedStudent) { alert('请先选择学生身份'); router.push('/select-student'); return; }
 
     setUploading(true);
     try {
@@ -73,11 +97,14 @@ export default function UploadPage() {
       formData.append('childName', childName.trim());
       formData.append('projectName', projectName.trim());
       formData.append('styleId', selectedStyle);
+      formData.append('userId', selectedStudent.id);
 
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? '上传失败');
 
+      // 上传成功后清除选中状态（防止重复提交）
+      sessionStorage.removeItem('selected_student');
       setTimeout(() => router.push('/my-works'), 600);
     } catch (err: any) {
       alert('上传失败：' + err.message);
@@ -85,21 +112,39 @@ export default function UploadPage() {
     }
   };
 
+  if (redirecting) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
+        <div className="text-6xl animate-bounce mb-4">🎒</div>
+        <p className="text-2xl text-purple-600 font-bold">准备中...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl md:text-5xl font-bold text-center text-purple-600 mb-4">🎨 上传你的创意</h1>
-        <p className="text-lg md:text-2xl text-center text-gray-600 mb-8 md:mb-12">上传你的创意绘画，让 AI 帮你变成动画！</p>
+        <p className="text-lg md:text-2xl text-center text-gray-600 mb-8">上传你的创意绘画，让 AI 帮你变成动画！</p>
 
-        <div className="bg-white rounded-3xl shadow-2xl p-4 md:p-12 space-y-8 md:space-y-12">
-
-          {/* 小朋友名字 */}
-          <div>
-            <label className="block text-xl md:text-2xl font-bold text-gray-800 mb-3">👦 小朋友名字 <span className="text-red-500">*</span></label>
-            <input type="text" value={childName} onChange={(e) => setChildName(e.target.value.slice(0, 20))}
-              placeholder="请输入名字（最多20个字）" maxLength={20}
-              className="w-full border-4 border-purple-300 rounded-2xl px-4 md:px-6 py-3 md:py-4 text-xl md:text-2xl focus:border-purple-500 focus:outline-none" />
+        {/* 已选学生提示条 */}
+        {selectedStudent && (
+          <div className="bg-purple-100 border-2 border-purple-300 rounded-2xl p-3 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">👦</span>
+              <div>
+                <p className="font-bold text-purple-700">{selectedStudent.name}</p>
+                <p className="text-purple-400 text-xs">{selectedStudent.institution}</p>
+              </div>
+            </div>
+            <button onClick={() => router.push('/select-student')}
+              className="px-3 py-1 bg-white rounded-xl text-purple-600 text-sm font-bold hover:bg-purple-50">
+              切换
+            </button>
           </div>
+        )}
+
+        <div className="bg-white rounded-3xl shadow-2xl p-4 md:p-12 space-y-8">
 
           {/* 作品名称 */}
           <div>
@@ -163,9 +208,9 @@ export default function UploadPage() {
           </div>
         </div>
 
-        <div className="mt-6 md:mt-8 text-center">
+        <div className="mt-6 text-center">
           <Link href="/">
-            <KidButton className="bg-gray-400 text-white text-sm md:text-base px-4 py-2 md:px-6 md:py-3">← 返回首页</KidButton>
+            <KidButton className="bg-gray-400 text-white text-sm px-4 py-2 md:px-6 md:py-3">← 返回首页</KidButton>
           </Link>
         </div>
       </div>

@@ -13,7 +13,7 @@ export async function GET(
 
     const { data: project, error } = await supabaseAdmin
       .from('projects')
-      .select('*, styles(name)')
+      .select('*, styles(name), users(name, institution, activity_date, session_number, student_code)')
       .eq('id', id)
       .single();
 
@@ -24,6 +24,11 @@ export async function GET(
     const result = {
       ...project,
       style_name: project.styles?.name ?? null,
+      user_name:        project.users?.name ?? null,
+      user_institution: project.users?.institution ?? null,
+      user_activity_date: project.users?.activity_date ?? null,
+      user_session_number: project.users?.session_number ?? null,
+      user_student_code: project.users?.student_code ?? null,
     };
 
     return NextResponse.json({ success: true, data: { project: result } });

@@ -1,9 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import KidButton from '@/components/KidButton';
+
+interface SelectedStudent {
+  id: string;
+  name: string;
+  student_code: string;
+  institution: string;
+  activity_date: string;
+  session_number: number;
+}
 
 interface Project {
   id: string;
@@ -17,6 +26,12 @@ interface Project {
   created_at: string;
   updated_at: string;
   style_name?: string;
+  user_id?: string;
+  user_name?: string;
+  user_institution?: string;
+  user_activity_date?: string;
+  user_session_number?: number;
+  user_student_code?: string;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -34,7 +49,13 @@ const STYLE_NAMES: Record<string, string> = {
   cyberpunk: '🌃 赛博朋克',
 };
 
-// 通用下载（fetch blob 方式，手机可触发保存）
+const SESSION_TEXT: Record<number, string> = {
+  1: '第一场', 2: '第二场', 3: '第三场', 4: '第四场',
+  5: '第五场', 6: '第六场', 7: '第七场', 8: '第八场',
+  9: '第九场', 10: '第十场',
+};
+
+// 通用下载（fetch blob 方式）
 async function downloadUrl(url: string, filename: string) {
   try {
     const response = await fetch(url);
@@ -55,45 +76,64 @@ async function downloadUrl(url: string, filename: string) {
 // 图片查看器（纯查看，无按钮）
 function ImageViewer({ src, onClose }: { src: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-      onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
       <button onClick={onClose}
         className="absolute top-4 right-4 w-10 h-10 bg-white/20 backdrop-blur rounded-full flex items-center justify-center text-white text-2xl hover:bg-white/40">
         ✕
       </button>
-      <img src={src} alt="查看大图"
-        className="max-w-full max-h-[85vh] rounded-xl object-contain"
+      <img src={src} alt="查看大图" className="max-w-full max-h-[85vh] rounded-xl object-contain"
         onClick={(e) => e.stopPropagation()} />
     </div>
   );
 }
 
+function formatDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [projectId, setProjectId] = useState('');
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
+  const [currentStudent, setCurrentStudent] = useState<SelectedStudent | null>(null);
+  const [notOwner, setNotOwner] = useState(false);
 
   useEffect(() => { params.then(({ id }) => setProjectId(id)); }, [params]);
+
+  // 获取当前登录学生
+  useEffect(() => {
+    const stored = sessionStorage.getItem('selected_student');
+    if (stored) setCurrentStudent(JSON.parse(stored));
+  }, []);
 
   useEffect(() => {
     if (!projectId) return;
     fetch('/api/projects/' + projectId)
       .then(r => r.json())
       .then(data => {
-        if (data.success) setProject(data.data.project);
-        else setError(data.error ?? '未知错误');
+        if (data.success) {
+          const p = data.data.project;
+          setProject(p);
+          // 安全校验：只有自己的作品才能查看
+          if (currentStudent && p.user_id && p.user_id !== currentStudent.id) {
+            setNotOwner(true);
+          }
+        } else {
+          setError(data.error ?? '未知错误');
+        }
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [projectId]);
+  }, [projectId, currentStudent]);
 
-  // ESC 关闭图片查看器
+  // ESC 关闭
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setViewerSrc(null);
-    };
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setViewerSrc(null); };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
@@ -102,6 +142,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100">
       <div className="text-6xl animate-bounce mb-4">🎬</div>
       <p className="text-2xl text-purple-600 font-bold">加载中...</p>
+    </div>
+  );
+
+  if (notOwner) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-100 to-purple-100 p-8">
+      <div className="text-6xl mb-4">🚫</div>
+      <h2 className="text-2xl font-bold text-gray-800 mb-4">这不是你的作品</h2>
+      <p className="text-gray-500 mb-6">请回到「我的作品」查看自己的作品</p>
+      <Link href="/my-works" className="px-8 py-4 bg-purple-500 text-white rounded-3xl font-bold text-xl hover:bg-purple-600">← 我的作品</Link>
     </div>
   );
 
@@ -115,9 +164,12 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   if (!project) return null;
 
+  const studentDisplay = project.user_name
+    ? `${project.user_name} · ${project.user_institution ?? ''} · ${formatDate(project.user_activity_date ?? '')} · ${SESSION_TEXT[project.user_session_number ?? 1] ?? ''}`
+    : project.child_name;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 p-4 md:p-8">
-      {/* 图片查看器浮层 */}
       {viewerSrc && <ImageViewer src={viewerSrc} onClose={() => setViewerSrc(null)} />}
 
       <div className="max-w-4xl mx-auto space-y-8">
@@ -139,8 +191,15 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </div>
           <h1 className="text-2xl md:text-3xl font-bold text-purple-700 text-center">{project.project_name || '未命名作品'}</h1>
           <p className="text-purple-500 text-sm text-center mt-2">
-            👦 {project.child_name} · {STYLE_NAMES[project.style_id] ?? project.style_id}
+            {project.user_name ? (
+              <span>👦 {studentDisplay}</span>
+            ) : (
+              <span>👦 {project.child_name} · {STYLE_NAMES[project.style_id] ?? project.style_id}</span>
+            )}
           </p>
+          {project.user_student_code && (
+            <p className="text-gray-400 text-xs text-center mt-1">学号：{project.user_student_code}</p>
+          )}
           <p className="text-gray-400 text-xs text-center mt-1">
             创建时间：{new Date(project.created_at).toLocaleString('zh-CN')}
           </p>
@@ -162,7 +221,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           )}
         </section>
 
-        {/* 九宫格分镜图 - 点击放大 */}
+        {/* 九宫格分镜图 */}
         <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">🎬 九宫格分镜</h2>
           {project.storyboard_image_url ? (
@@ -180,15 +239,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           )}
         </section>
 
-        {/* 动画视频 - 播放+下载 */}
+        {/* 动画视频 */}
         <section className="bg-white rounded-3xl shadow-xl p-6 md:p-10">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">🎥 动画视频</h2>
           {project.video_url ? (
             <div>
               <video src={project.video_url} controls playsInline className="w-full rounded-2xl shadow-lg mx-auto" />
               <div className="mt-3 flex gap-3 justify-center">
-                <button
-                  onClick={() => downloadUrl(project.video_url!, `${project.child_name}_动画视频.mp4`)}
+                <button onClick={() => downloadUrl(project.video_url!, `${project.project_name || '动画视频'}.mp4`)}
                   className="px-6 py-3 bg-gradient-to-r from-orange-400 to-red-400 text-white rounded-2xl font-bold hover:opacity-90 shadow-lg text-base">
                   📥 下载视频
                 </button>

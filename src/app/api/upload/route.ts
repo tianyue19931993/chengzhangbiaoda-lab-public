@@ -12,9 +12,10 @@ export async function POST(request: NextRequest) {
     // 1. 解析表单数据
     const formData = await request.formData();
     const file       = formData.get('file')       as File | null;
-    const childName  = (formData.get('childName') as string | null)?.trim() || '';
+    const childName   = (formData.get('childName')   as string | null)?.trim() || '';
     const projectName = (formData.get('projectName') as string | null)?.trim() || '';
     const styleId    = (formData.get('styleId')    as string | null) || 'pixar';
+    const userId     = (formData.get('userId')     as string | null)?.trim() || null;
 
     console.log(`[upload] 解析表单耗时: ${Date.now() - startTime}ms`);
 
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
         style_id: styleId,
         original_image_url: uploadedImage,
         status: 'pending',
+        user_id: userId || undefined,
       })
       .select()
       .single();

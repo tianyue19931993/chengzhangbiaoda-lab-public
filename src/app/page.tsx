@@ -37,7 +37,7 @@ export default function Home() {
       
       <div className="space-y-6">
         <KidButton 
-          href="/upload"
+          href="/select-student"
           className="bg-gradient-to-r from-pink-400 to-purple-400 text-white"
         >
           🎨 开始创作
