@@ -37,6 +37,7 @@ export default function UploadPage() {
   const [stylesLoading, setStylesLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<SelectedStudent | null>(null);
   const [redirecting, setRedirecting] = useState(true);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   // 页面加载时：检查是否已选学生，没有则跳转选人页面
   useEffect(() => {
@@ -103,8 +104,12 @@ export default function UploadPage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error ?? '上传失败');
 
-      // 上传成功，跳转到首页
-      window.location.href = '/';
+      // 上传成功，显示提示后跳转到首页
+      setUploading(false);
+      setUploadSuccess(true);
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
     } catch (err: any) {
       alert('上传失败：' + err.message);
       setUploading(false);
@@ -197,6 +202,13 @@ export default function UploadPage() {
               <div>
                 <p className="text-xl md:text-2xl text-purple-600 font-bold mb-4">正在上传...</p>
                 <div className="text-5xl animate-bounce">⏳</div>
+              </div>
+            ) : uploadSuccess ? (
+              <div className="bg-green-100 border-4 border-green-400 rounded-3xl p-8 text-center">
+                <div className="text-6xl mb-4">✅</div>
+                <p className="text-2xl font-bold text-green-700 mb-2">上传成功！</p>
+                <p className="text-green-600">作品正在处理中，请耐心等待~</p>
+                <p className="text-green-500 mt-4 animate-pulse">即将返回首页...</p>
               </div>
             ) : (
               <KidButton onClick={handleUpload} disabled={!selectedFile}

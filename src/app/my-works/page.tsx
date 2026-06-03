@@ -161,12 +161,18 @@ export default function MyWorksPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/projects?userId=${userId}`);
+      const res = await fetch(`/api/projects?userId=${userId}`, { signal: AbortSignal.timeout(15000) });
+      if (!res.ok) throw new Error(`服务器错误 ${res.status}`);
       const data = await res.json();
       if (data.success) setAllProjects(data.data.projects ?? []);
       else setError(data.error ?? '加载失败');
     } catch (e: any) {
-      setError(e.message ?? '网络错误');
+      if (e.name === 'TimeoutError') {
+        setError('加载超时，请检查网络后重试');
+      } else {
+        setError(e.message ?? '网络错误');
+      }
+      setAllProjects([]); // 出错时清空，避免卡在 loading 状态
     } finally {
       setLoading(false);
     }
