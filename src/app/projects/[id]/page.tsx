@@ -133,15 +133,45 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   // ESC 关闭
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setViewerSrc(null); };
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') { setViewerSrc(null); setShowTip(false); } };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // 打开视频 - 直接跳转到系统浏览器
+  const [showTip, setShowTip] = useState(false); // 微信提示
+
+  // 打开视频 - 多策略尝试
   const handleOpenVideo = () => {
     if (!project?.video_url) return;
-    window.location.href = project.video_url;
+    
+    const url = project.video_url;
+    const isWechatEnv = /MicroMessenger/i.test(navigator.userAgent);
+    
+    if (!isWechatEnv) {
+      // 非微信环境：直接跳转
+      window.location.href = url;
+      return;
+    }
+    
+    // 微信环境：先尝试直接跳转，同时显示复制提示作为 fallback
+    // 尝试方法1：window.top.location（可能触发外部浏览器）
+    try { window.top!.location.href = url; } catch {}
+    
+    // 显示复制提示（无论上面是否成功）
+    setShowTip(true);
+  };
+
+  // 复制链接
+  const copyLink = async () => {
+    if (!project?.video_url) return;
+    try {
+      await navigator.clipboard.writeText(project.video_url);
+      alert('✅ 链接已复制！请打开 Safari 浏览器粘贴访问，长按视频即可保存到相册');
+      setShowTip(false);
+    } catch {
+      prompt('复制此链接，打开浏览器访问：', project.video_url);
+      setShowTip(false);
+    }
   };
 
   if (loading) return (
@@ -278,6 +308,30 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
 
       </div>
+
+      {/* 微信环境提示 */}
+      {showTip && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setShowTip(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 text-center space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="text-5xl">📱</div>
+            <h3 className="text-xl font-bold text-gray-800">在浏览器中打开</h3>
+            <p className="text-gray-500 text-sm leading-relaxed">
+              微信无法直接保存视频<br/>
+              请复制链接后用 Safari 打开
+            </p>
+            <div className="space-y-2">
+              <button onClick={copyLink}
+                className="w-full py-3 bg-gradient-to-r from-orange-400 to-red-500 text-white rounded-2xl font-bold shadow-lg hover:opacity-90">
+                📋 复制链接
+              </button>
+              <button onClick={() => setShowTip(false)}
+                className="w-full py-2 text-gray-400 text-sm">
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
