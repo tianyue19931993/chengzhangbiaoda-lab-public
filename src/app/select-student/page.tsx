@@ -160,15 +160,6 @@ export default function SelectStudentPage() {
           </div>
         )}
 
-        {/* 无结果 */}
-        {!loading && nameInput && users.length === 0 && (
-          <div className="bg-white rounded-3xl shadow-xl p-8 text-center">
-            <div className="text-5xl mb-4">🤔</div>
-            <p className="text-gray-500 font-bold">没找到 "{nameInput}"</p>
-            <p className="text-gray-400 text-sm mt-2">请联系老师确认是否已报名</p>
-          </div>
-        )}
-
         {/* 确认按钮 */}
         {selectedUser && (
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur border-t border-gray-200 shadow-lg">
