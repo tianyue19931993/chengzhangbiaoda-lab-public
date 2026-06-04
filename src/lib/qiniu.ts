@@ -54,7 +54,7 @@ export function getPublicUrl(key: string): string {
 /**
  * 根据 format 映射到七牛云文件夹路径
  */
-export function getQiniuKey(format: 'video' | 'storyboard' | 'original', projectId: string, fileName: string): string {
+export function getQiniuKey(format: 'video' | 'storyboard' | 'original', projectId: string | number, fileName: string): string {
   const folderMap = {
     video: 'videos',
     storyboard: 'generated-images',

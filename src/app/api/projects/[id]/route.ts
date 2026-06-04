@@ -10,11 +10,15 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) {
+      return NextResponse.json({ success: false, error: 'Invalid ID' }, { status: 400 });
+    }
 
     const { data: project, error } = await supabaseAdmin
       .from('projects')
       .select('*, styles(name), users(name, institution, activity_date, session_number, student_code)')
-      .eq('id', id)
+      .eq('id', numId)
       .single();
 
     if (error || !project) {
@@ -44,6 +48,11 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) {
+      return NextResponse.json({ success: false, error: 'Invalid ID' }, { status: 400 });
+    }
+
     const body = await request.json();
     const updates: Record<string, any> = {};
 
@@ -59,7 +68,7 @@ export async function PATCH(
     const { data: project, error } = await supabaseAdmin
       .from('projects')
       .update(updates)
-      .eq('id', id)
+      .eq('id', numId)
       .select()
       .single();
 
@@ -77,7 +86,12 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const { error } = await supabaseAdmin.from('projects').delete().eq('id', id);
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) {
+      return NextResponse.json({ success: false, error: 'Invalid ID' }, { status: 400 });
+    }
+
+    const { error } = await supabaseAdmin.from('projects').delete().eq('id', numId);
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     return NextResponse.json({ success: true, data: { message: 'Deleted' } });
   } catch (err: any) {

@@ -14,6 +14,11 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) {
+      return NextResponse.json({ success: false, error: 'Invalid ID' }, { status: 400 });
+    }
+
     const formData = await request.formData();
     const format   = (formData.get('format')   as string) || 'storyboard';
     const teacherId = (formData.get('teacherId') as string) || 'system';
@@ -28,7 +33,7 @@ export async function POST(
     const { error: updateErr } = await supabaseAdmin
       .from('projects')
       .update({ [updateField]: fileUrl })
-      .eq('id', id);
+      .eq('id', numId);
 
     if (updateErr) {
       return NextResponse.json({ success: false, error: '更新项目失败：' + updateErr.message }, { status: 500 });
@@ -37,7 +42,7 @@ export async function POST(
     // 记录日志
     try {
       await supabaseAdmin.from('export_logs').insert({
-        project_id: id,
+        project_id: numId,
         teacher_id: teacherId,
         format,
         file_url: fileUrl,
@@ -60,12 +65,17 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) {
+      return NextResponse.json({ success: false, error: 'Invalid ID' }, { status: 400 });
+    }
+
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format') || 'storyboard';
     const fileName = searchParams.get('fileName') || (format === 'video' ? 'video.mp4' : 'image.png');
     const contentType = searchParams.get('contentType') || (format === 'video' ? 'video/mp4' : 'image/png');
 
-    const qiniuKey = getQiniuKey(format as 'video' | 'storyboard', id, fileName);
+    const qiniuKey = getQiniuKey(format as 'video' | 'storyboard', String(numId), fileName);
     const token = generateUploadToken(qiniuKey);
     const publicUrl = getPublicUrl(qiniuKey);
 

@@ -6,7 +6,7 @@ import KidButton from '@/components/KidButton';
 import { formatDate } from '@/lib/utils';
 
 interface Project {
-  id: string;
+  id: number;
   child_name: string;
   project_name: string;
   style_id: string;
@@ -19,7 +19,7 @@ interface Project {
 }
 
 interface SelectedStudent {
-  id: string;
+  id: number;
   name: string;
   student_code: string;
   institution: string;
@@ -186,7 +186,7 @@ export default function MyWorksPage() {
     loadProjects(student.id);
   }, []);
 
-  const loadProjects = async (userId: string) => {
+  const loadProjects = async (userId: number) => {
     setLoading(true);
     setError('');
     try {

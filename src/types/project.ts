@@ -3,7 +3,7 @@
 export type ProjectStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface Project {
-  id: string;
+  id: number;
   child_name: string;
   project_name: string;
   style_id?: string;
@@ -48,7 +48,7 @@ export interface Style {
 
 export interface ExportLog {
   id: string;
-  project_id: string;
+  project_id: number;
   teacher_id: string;
   format: string;
   file_url: string;

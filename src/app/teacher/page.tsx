@@ -7,7 +7,7 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
 interface Project {
-  id: string;
+  id: number;
   child_name: string;
   project_name: string;
   style_id: string;

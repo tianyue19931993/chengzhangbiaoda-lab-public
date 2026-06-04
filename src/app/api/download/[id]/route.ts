@@ -10,12 +10,16 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const numId = parseInt(id, 10);
+    if (isNaN(numId)) {
+      return NextResponse.json({ success: false, error: 'Invalid ID' }, { status: 400 });
+    }
 
     // 1. 从数据库获取视频 URL（JOIN users 表获取名字）
     const { data: project, error } = await supabaseAdmin
       .from('projects')
       .select('video_url, users(name)')
-      .eq('id', id)
+      .eq('id', numId)
       .single();
 
     if (error || !project?.video_url) {
