@@ -90,27 +90,14 @@ export default function UploadPage() {
 
     setUploading(true);
     try {
-      // 1. 先创建项目记录（不带上传图片URL），拿到 projectId
-      const createFormData = new FormData();
-      createFormData.append('childName', childName.trim());
-      createFormData.append('projectName', projectName.trim());
-      createFormData.append('styleId', selectedStyle);
-      createFormData.append('userId', selectedStudent.id);
-
-      const createRes = await fetch('/api/upload', { method: 'POST', body: createFormData, signal: AbortSignal.timeout(25000) });
-      const createData = await createRes.json();
-      if (!createData.success) throw new Error(createData.error ?? '创建项目失败');
-
-      const projectId = createData.data.projectId;
-
-      // 2. 获取七牛上传凭证（用 projectId 构造正确的文件名）
-      const tokenRes = await fetch(`/api/upload?projectId=${projectId}&userId=${selectedStudent.id}&childName=${encodeURIComponent(childName.trim())}&projectName=${encodeURIComponent(projectName.trim())}&styleId=${selectedStyle}`);
+      // 1. 获取七牛上传凭证
+      const tokenRes = await fetch('/api/upload');
       const tokenData = await tokenRes.json();
       if (!tokenData.success) throw new Error(tokenData.error ?? '获取上传凭证失败');
 
       const { token, key, uploadUrl, publicUrl } = tokenData.data;
 
-      // 3. 前端直传七牛云
+      // 2. 前端直传七牛云
       const uploadFormData = new FormData();
       uploadFormData.append('file', selectedFile);
       uploadFormData.append('token', token);
@@ -122,15 +109,17 @@ export default function UploadPage() {
         throw new Error('图片上传失败：' + errText);
       }
 
-      // 4. 更新项目记录的图片URL
-      const updateRes = await fetch(`/api/projects/${projectId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ original_image_url: publicUrl }),
-        signal: AbortSignal.timeout(15000),
-      });
-      const updateData = await updateRes.json();
-      if (!updateData.success) throw new Error(updateData.error ?? '更新图片URL失败');
+      // 3. 通知后端创建项目记录
+      const formData = new FormData();
+      formData.append('childName', childName.trim());
+      formData.append('projectName', projectName.trim());
+      formData.append('styleId', selectedStyle);
+      formData.append('userId', selectedStudent.id);
+      formData.append('imageUrl', publicUrl);
+
+      const res = await fetch('/api/upload', { method: 'POST', body: formData, signal: AbortSignal.timeout(25000) });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error ?? '创建项目失败');
 
       setUploading(false);
       setUploadSuccess(true);
