@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { generateUploadToken, getQiniuKey, getPublicUrl } from '@/lib/qiniu';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
 
 /**
  * POST /api/teacher/projects/[id]/export
- * 
- * 策略：先生成签名上传 URL，让前端直接上传到 Supabase Storage，
- * 然后再调用此接口记录数据库。
- * 
- * 如果文件较小（<4MB），也可以直接上传。
+ * 接收前端已上传到七牛云的文件 URL，更新数据库
  */
-
-// POST - 处理小文件直接上传 + 数据库更新
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,52 +15,12 @@ export async function POST(
   try {
     const { id } = await params;
     const formData = await request.formData();
-    const file     = formData.get('file') as File | null;
-    const format   = (formData.get('format') as string) || 'storyboard';
+    const format   = (formData.get('format')   as string) || 'storyboard';
     const teacherId = (formData.get('teacherId') as string) || 'system';
-    // 支持直接传入已上传的 fileUrl（客户端直传场景）
-    const existingFileUrl = (formData.get('fileUrl') as string) || '';
-
-    if (!file && !existingFileUrl) {
-      return NextResponse.json({ success: false, error: '请选择要上传的文件' }, { status: 400 });
-    }
-
-    const bucketMap: Record<string, string> = {
-      storyboard: 'generated-images',
-      video: 'videos',
-    };
-    const bucket = bucketMap[format];
-    if (!bucket) {
-      return NextResponse.json({ success: false, error: '无效的格式' }, { status: 400 });
-    }
-
-    let fileUrl = existingFileUrl;
-
-    // 如果有文件且没有现成的 URL，直接上传（小文件）
-    if (file && !fileUrl) {
-      const ext = file.name.split('.').pop() ?? (format === 'video' ? 'mp4' : 'png');
-      const fileName = format + '/' + id + '-' + Date.now() + '.' + ext;
-
-      const fileBuffer = await file.arrayBuffer();
-
-      const { error: storageErr } = await supabaseAdmin.storage
-        .from(bucket)
-        .upload(fileName, fileBuffer, {
-          contentType: file.type,
-          cacheControl: '3600',
-          upsert: true,
-        });
-
-      if (storageErr) {
-        return NextResponse.json({ success: false, error: '文件上传失败：' + storageErr.message }, { status: 500 });
-      }
-
-      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(fileName);
-      fileUrl = urlData.publicUrl;
-    }
+    const fileUrl   = (formData.get('fileUrl')  as string) || '';
 
     if (!fileUrl) {
-      return NextResponse.json({ success: false, error: '无法获取文件URL' }, { status: 500 });
+      return NextResponse.json({ success: false, error: '请提供文件URL' }, { status: 400 });
     }
 
     // 更新项目字段
@@ -96,7 +50,10 @@ export async function POST(
   }
 }
 
-// GET - 获取签名上传 URL（用于大文件客户端直传）
+/**
+ * GET /api/teacher/projects/[id]/export
+ * 返回七牛云上传凭证，供前端直传
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -105,39 +62,20 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format') || 'storyboard';
-    const fileName = searchParams.get('fileName') || 'upload';
-    const contentType = searchParams.get('contentType') || 'application/octet-stream';
+    const fileName = searchParams.get('fileName') || (format === 'video' ? 'video.mp4' : 'image.png');
+    const contentType = searchParams.get('contentType') || (format === 'video' ? 'video/mp4' : 'image/png');
 
-    const bucketMap: Record<string, string> = {
-      storyboard: 'generated-images',
-      video: 'videos',
-    };
-    const bucket = bucketMap[format];
-    if (!bucket) {
-      return NextResponse.json({ success: false, error: '无效的格式' }, { status: 400 });
-    }
-
-    const ext = fileName.split('.').pop() ?? (format === 'video' ? 'mp4' : 'png');
-    const path = format + '/' + id + '-' + Date.now() + '.' + ext;
-
-    const { data, error } = await supabaseAdmin.storage
-      .from(bucket)
-      .createSignedUploadUrl(path);
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
-
-    const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(path);
+    const qiniuKey = getQiniuKey(format as 'video' | 'storyboard', id, fileName);
+    const token = generateUploadToken(qiniuKey);
+    const publicUrl = getPublicUrl(qiniuKey);
 
     return NextResponse.json({
       success: true,
       data: {
-        signedUrl: data.signedUrl,
-        token: data.token,
-        path,
-        publicUrl: urlData.publicUrl,
-        bucket,
+        token,
+        key: qiniuKey,
+        uploadUrl: 'https://upload.qiniup.com',
+        publicUrl,
       },
     });
   } catch (err: any) {

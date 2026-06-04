@@ -39,7 +39,6 @@ export default function UploadPage() {
   const [redirecting, setRedirecting] = useState(true);
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
-  // 页面加载时：检查是否已选学生，没有则跳转选人页面
   useEffect(() => {
     const stored = sessionStorage.getItem('selected_student');
     if (!stored) {
@@ -48,18 +47,16 @@ export default function UploadPage() {
     }
     const student: SelectedStudent = JSON.parse(stored);
     setSelectedStudent(student);
-    setChildName(student.name); // 自动填入名字
+    setChildName(student.name);
     setRedirecting(false);
   }, [router]);
 
-  // 从数据库加载风格列表
   useEffect(() => {
     fetch('/api/styles')
       .then(r => r.json())
       .then(data => {
         if (data.success && data.data?.styles?.length) {
           setStyles(data.data.styles);
-          // 强制默认 pixar（如果存在），否则用第一个
           const hasPixar = data.data.styles.find((s: any) => s.id === 'pixar');
           setSelectedStyle(hasPixar ? 'pixar' : data.data.styles[0].id);
         }
@@ -93,18 +90,37 @@ export default function UploadPage() {
 
     setUploading(true);
     try {
+      // 1. 获取七牛上传凭证
+      const tokenRes = await fetch('/api/upload');
+      const tokenData = await tokenRes.json();
+      if (!tokenData.success) throw new Error(tokenData.error ?? '获取上传凭证失败');
+
+      const { token, key, uploadUrl, publicUrl } = tokenData.data;
+
+      // 2. 前端直传七牛云
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', selectedFile);
+      uploadFormData.append('token', token);
+      uploadFormData.append('key', key);
+
+      const uploadRes = await fetch(uploadUrl, { method: 'POST', body: uploadFormData });
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text().catch(() => '上传失败');
+        throw new Error('图片上传失败：' + errText);
+      }
+
+      // 3. 通知后端创建项目记录
       const formData = new FormData();
-      formData.append('file', selectedFile);
       formData.append('childName', childName.trim());
       formData.append('projectName', projectName.trim());
       formData.append('styleId', selectedStyle);
       formData.append('userId', selectedStudent.id);
+      formData.append('imageUrl', publicUrl);
 
       const res = await fetch('/api/upload', { method: 'POST', body: formData, signal: AbortSignal.timeout(25000) });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error ?? '上传失败');
+      if (!data.success) throw new Error(data.error ?? '创建项目失败');
 
-      // 上传成功，显示提示后跳转到首页
       setUploading(false);
       setUploadSuccess(true);
       setTimeout(() => {
@@ -131,7 +147,6 @@ export default function UploadPage() {
         <h1 className="text-3xl md:text-5xl font-bold text-center text-purple-600 mb-4">🎨 上传你的创意</h1>
         <p className="text-lg md:text-2xl text-center text-gray-600 mb-8">上传你的创意绘画，让 AI 帮你变成动画！</p>
 
-        {/* 已选学生提示条 */}
         {selectedStudent && (
           <div className="bg-purple-100 border-2 border-purple-300 rounded-2xl p-3 mb-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -150,7 +165,6 @@ export default function UploadPage() {
 
         <div className="bg-white rounded-3xl shadow-2xl p-4 md:p-12 space-y-8">
 
-          {/* 作品名称 */}
           <div>
             <label className="block text-xl md:text-2xl font-bold text-gray-800 mb-3">📝 作品名称 <span className="text-red-500">*</span></label>
             <input type="text" value={projectName} onChange={(e) => setProjectName(e.target.value.slice(0, 50))}
@@ -158,7 +172,6 @@ export default function UploadPage() {
               className="w-full border-4 border-purple-300 rounded-2xl px-4 md:px-6 py-3 md:py-4 text-xl md:text-2xl focus:border-purple-500 focus:outline-none" />
           </div>
 
-          {/* 上传图片 */}
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-6">📷 上传创意画</h2>
             <div className="border-4 border-dashed border-purple-300 rounded-3xl p-6 md:p-12 text-center cursor-pointer hover:border-purple-500"
@@ -179,7 +192,6 @@ export default function UploadPage() {
             <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES.join(',')} onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); }} className="hidden" />
           </div>
 
-          {/* 风格选择 */}
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-6">🎨 选择风格</h2>
             {stylesLoading ? (
@@ -196,7 +208,6 @@ export default function UploadPage() {
             )}
           </div>
 
-          {/* 提交按钮 */}
           <div className="text-center">
             {uploading ? (
               <div>

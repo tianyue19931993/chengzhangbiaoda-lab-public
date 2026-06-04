@@ -1,65 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { generateUploadToken, getQiniuKey, getPublicUrl } from '@/lib/qiniu';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30; // 增加超时时间到 30 秒
 
-// POST /api/upload - 上传图片并创建项目
+/**
+ * POST /api/upload - 创建项目记录（前端应先直传七牛云再调此接口）
+ * 也兼容旧模式：传入 file 则后端上传（不推荐，有大小限制）
+ */
 export async function POST(request: NextRequest) {
-  const startTime = Date.now();
-
   try {
-    // 1. 解析表单数据
     const formData = await request.formData();
-    const file       = formData.get('file')       as File | null;
     const childName   = (formData.get('childName')   as string | null)?.trim() || '';
     const projectName = (formData.get('projectName') as string | null)?.trim() || '';
-    const styleId    = (formData.get('styleId')    as string | null) || 'pixar';
-    const userId     = (formData.get('userId')     as string | null)?.trim() || null;
+    const styleId     = (formData.get('styleId')     as string | null) || 'pixar';
+    const userId      = (formData.get('userId')      as string | null)?.trim() || null;
+    const existingUrl = (formData.get('imageUrl')     as string | null)?.trim() || null;
+    const file        = formData.get('file') as File | null;
 
-    console.log(`[upload] 解析表单耗时: ${Date.now() - startTime}ms`);
-
-    // 2. 校验参数（快速失败）
-    if (!file) return NextResponse.json({ success: false, error: '请选择要上传的图片' }, { status: 400 });
     if (!childName) return NextResponse.json({ success: false, error: '请输入小朋友的名字' }, { status: 400 });
     if (!projectName) return NextResponse.json({ success: false, error: '请输入作品名称' }, { status: 400 });
 
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ success: false, error: '仅支持 JPG、PNG、WEBP 格式' }, { status: 400 });
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json({ success: false, error: '文件大小不能超过 10MB' }, { status: 400 });
-    }
+    let uploadedImage = existingUrl;
 
-    // 3. 上传到 Supabase Storage（并行优化：先准备文件名和数组格式）
-    const ext = file.name.split('.').pop() ?? 'jpg';
-    const fileName = 'uploads/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
-    
-    const uploadStart = Date.now();
-    const fileBuffer = await file.arrayBuffer(); // 转为 ArrayBuffer 提高上传速度
-    
-    const { error: storageErr } = await supabaseAdmin.storage
-      .from('original-images')
-      .upload(fileName, fileBuffer, {
-        contentType: file.type,
-        cacheControl: '3600',
-        upsert: false,
+    // 兼容旧模式：如果传了 file 且没有 imageUrl，走后端上传（有 Vercel 大小限制）
+    if (file && !uploadedImage) {
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        return NextResponse.json({ success: false, error: '仅支持 JPG、PNG、WEBP 格式' }, { status: 400 });
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        return NextResponse.json({ success: false, error: '文件大小不能超过 10MB' }, { status: 400 });
+      }
+
+      // 生成临时 ID 用于文件命名
+      const tempId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const ext = file.name.split('.').pop() ?? 'jpg';
+      const qiniuKey = getQiniuKey('original', tempId, file.name);
+      const token = generateUploadToken(qiniuKey);
+
+      // 上传到七牛云
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      uploadFormData.append('token', token);
+      uploadFormData.append('key', qiniuKey);
+
+      const uploadRes = await fetch('https://upload.qiniup.com', {
+        method: 'POST',
+        body: uploadFormData,
       });
 
-    console.log(`[upload] Storage 上传耗时: ${Date.now() - uploadStart}ms, 文件大小: ${(file.size / 1024).toFixed(1)}KB`);
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text().catch(() => '上传失败');
+        return NextResponse.json({ success: false, error: '图片上传失败：' + errText }, { status: 500 });
+      }
 
-    if (storageErr) {
-      console.error('[upload] Storage 错误:', storageErr);
-      return NextResponse.json({ success: false, error: '图片上传失败：' + storageErr.message }, { status: 500 });
+      uploadedImage = getPublicUrl(qiniuKey);
     }
 
-    // 4. 获取公开 URL
-    const { data: urlData } = supabaseAdmin.storage.from('original-images').getPublicUrl(fileName);
-    const uploadedImage = urlData.publicUrl;
+    if (!uploadedImage) {
+      return NextResponse.json({ success: false, error: '请提供图片' }, { status: 400 });
+    }
 
-    // 5. 创建项目记录
-    const dbStart = Date.now();
+    // 创建项目记录
     const { data: project, error: projectErr } = await supabaseAdmin
       .from('projects')
       .insert({
@@ -73,19 +76,32 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    console.log(`[upload] 数据库写入耗时: ${Date.now() - dbStart}ms`);
-    console.log(`[upload] 总耗时: ${Date.now() - startTime}ms`);
-
     if (projectErr || !project) {
       return NextResponse.json({ success: false, error: '创建项目失败：' + (projectErr?.message ?? '未知错误') }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      data: { projectId: project.id, originalImageUrl: uploadedImage, fileName },
+      data: { projectId: project.id, originalImageUrl: uploadedImage },
     });
   } catch (err: any) {
     console.error('[upload] 异常:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+// GET - 获取七牛云上传凭证（前端直传用）
+export async function GET() {
+  try {
+    const key = `original-images/${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}.jpg`;
+    const token = generateUploadToken(key);
+    const publicUrl = getPublicUrl(key);
+
+    return NextResponse.json({
+      success: true,
+      data: { token, key, uploadUrl: 'https://upload.qiniup.com', publicUrl },
+    });
+  } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

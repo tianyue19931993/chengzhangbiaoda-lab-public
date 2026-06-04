@@ -33,32 +33,34 @@ const STATUS_MAP: Record<string, { text: string; color: string }> = {
   failed:     { text: '❌ 失败',          color: 'bg-red-100 text-red-700' },
 };
 
-// 上传文件到 Supabase Storage（客户端直传，绕过 Vercel 限制）
-async function uploadToSupabase(
+// 七牛云直传上传函数
+async function uploadToQiniu(
   projectId: string,
   file: File,
   format: 'storyboard' | 'video'
 ): Promise<{ success: boolean; fileUrl?: string; error?: string }> {
   try {
-    // 1. 获取签名上传 URL
-    const signedUrlRes = await fetch(
+    // 1. 从 API 获取七牛上传凭证
+    const tokenRes = await fetch(
       `/api/teacher/projects/${projectId}/export?format=${format}&fileName=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`
     );
-    const signedData = await signedUrlRes.json();
+    const tokenData = await tokenRes.json();
 
-    if (!signedData.success) {
-      return { success: false, error: signedData.error || '获取上传链接失败' };
+    if (!tokenData.success) {
+      return { success: false, error: tokenData.error || '获取上传凭证失败' };
     }
 
-    const { signedUrl, publicUrl } = signedData.data;
+    const { token, key, uploadUrl, publicUrl } = tokenData.data;
 
-    // 2. 直接上传到 Supabase Storage（绕过 Vercel）
-    const uploadRes = await fetch(signedUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': file.type,
-      },
+    // 2. 前端直接上传到七牛云（不经过 Vercel，无大小限制）
+    const uploadFormData = new FormData();
+    uploadFormData.append('file', file);
+    uploadFormData.append('token', token);
+    uploadFormData.append('key', key);
+
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      body: uploadFormData,
     });
 
     if (!uploadRes.ok) {
@@ -93,10 +95,8 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
   const [loading, setLoading] = useState(true);
   const [projectId, setProjectId] = useState('');
 
-  // 上传状态
   const [uploadingStoryboard, setUploadingStoryboard] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [sbFileInput, setSbFileInput] = useState<HTMLInputElement | null>(null);
   const [vidFileInput, setVidFileInput] = useState<HTMLInputElement | null>(null);
 
@@ -120,24 +120,12 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
   const handleUpload = async (file: File, format: 'storyboard' | 'video') => {
     const setUploading = format === 'storyboard' ? setUploadingStoryboard : setUploadingVideo;
     setUploading(true);
-    setUploadProgress(0);
-
-    // 文件大小检查
-    const maxSize = format === 'video' ? 4.5 * 1024 * 1024 : 20 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert(`文件过大：${format === 'video' ? '视频最大 4.5MB' : '图片最大 20MB'}`);
-      setUploading(false);
-      return;
-    }
 
     try {
-      const result = await uploadToSupabase(projectId, file, format);
+      const result = await uploadToQiniu(projectId, file, format);
 
       if (result.success) {
-        // 自动更新状态：上传分镜图→处理中，上传视频→已完成
         const newStatus = format === 'storyboard' ? 'processing' : 'completed';
-        const prevStatus = project?.status ?? 'pending';
-        const shouldUpdate = newStatus !== prevStatus;
 
         await fetch('/api/teacher/projects/' + projectId, {
           method: 'PATCH',
@@ -145,7 +133,6 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
           body: JSON.stringify({ status: newStatus }),
         });
 
-        // 刷新数据
         fetch('/api/teacher/projects/' + projectId)
           .then(r => r.json())
           .then(d => {
@@ -164,7 +151,6 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
       alert('错误：' + e.message);
     } finally {
       setUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -281,7 +267,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
               {uploadingVideo ? '上传中...' : '📎 上传视频'}
             </button>
           </div>
-          <p className="text-center text-gray-400 text-sm mt-2">支持最大 4.5MB 的视频文件（超大文件可压缩后上传）</p>
+          <p className="text-center text-gray-400 text-sm mt-2">视频直传七牛云，无大小限制</p>
         </section>
 
         {/* 状态控制 */}
