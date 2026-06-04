@@ -5,6 +5,14 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import KidButton from '@/components/KidButton';
 
+// 中文日期格式（YYYY年M月D日），带 Invalid Date 防御
+function formatChineseDate(dateStr: string): string {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d.getTime())) return '-';
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
 interface SelectedStudent {
   id: number;
   name: string;
@@ -48,12 +56,6 @@ const STYLE_NAMES: Record<string, string> = {
   watercolor: '🎨 水彩',
   cyberpunk: '🌃 赛博朋克',
 };
-
-function formatDate(dateStr: string): string {
-  if (!dateStr) return '';
-  const d = new Date(dateStr + 'T00:00:00');
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
-}
 
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -157,7 +159,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             </div>
             <div>
               <div className="text-gray-500">创建时间</div>
-              <div className="font-medium">{formatDate(project.created_at)}</div>
+              <div className="font-medium">{formatChineseDate(project.created_at)}</div>
             </div>
             {project.user_name && (
               <div>
