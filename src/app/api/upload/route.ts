@@ -58,7 +58,10 @@ export async function POST(request: NextRequest) {
       uploadedImage = getPublicUrl(qiniuKey);
     }
 
-    if (!uploadedImage) {
+    // 创建项目记录（允许 imageUrl 为空，前端直传后再 PATCH 更新）
+    if (!uploadedImage && !file) {
+      // 前端直传模式：先创建空记录，返回 projectId，后续 PATCH 更新 URL
+    } else if (!uploadedImage) {
       return NextResponse.json({ success: false, error: '请提供图片' }, { status: 400 });
     }
 
