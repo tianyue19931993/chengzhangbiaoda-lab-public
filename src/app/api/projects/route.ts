@@ -26,14 +26,25 @@ export async function GET(request: NextRequest) {
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
 
     const projects = (data ?? []).map((p: any) => {
-      // 自动判断状态：storyboard 和 video 都有值 → completed，否则 processing
+      // 自动判断状态：基于 URL 存在性，而不是依赖数据库 status 字段
+      // 两个都有 → completed，有其一 → processing，都没有 → pending
       let autoStatus = p.status;
-      if (p.status !== 'completed' && p.status !== 'failed') {
-        const hasStoryboard = !!p.storyboard_image_url;
-        const hasVideo = !!p.video_url;
-        if (hasStoryboard && hasVideo) autoStatus = 'completed';
-        else if (hasStoryboard || hasVideo) autoStatus = 'processing';
+      const hasStoryboard = !!p.storyboard_image_url;
+      const hasVideo = !!p.video_url;
+      
+      if (hasStoryboard && hasVideo) {
+        autoStatus = 'completed';
+      } else if (hasStoryboard || hasVideo) {
+        autoStatus = 'processing';
+      } else {
+        autoStatus = 'pending';
       }
+      
+      // 保留 failed 状态（如果数据库明确标记为失败）
+      if (p.status === 'failed') {
+        autoStatus = 'failed';
+      }
+      
       return {
         ...p,
         status: autoStatus,

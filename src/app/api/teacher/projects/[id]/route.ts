@@ -32,10 +32,28 @@ export async function GET(
       .eq('project_id', numId)
       .order('created_at', { ascending: false });
 
+    // 自动判断状态：基于 URL 存在性
+    let autoStatus = project.status;
+    const hasStoryboard = !!project.storyboard_image_url;
+    const hasVideo = !!project.video_url;
+    
+    if (hasStoryboard && hasVideo) {
+      autoStatus = 'completed';
+    } else if (hasStoryboard || hasVideo) {
+      autoStatus = 'processing';
+    } else {
+      autoStatus = 'pending';
+    }
+    
+    // 保留 failed 状态
+    if (project.status === 'failed') {
+      autoStatus = 'failed';
+    }
+
     return NextResponse.json({
       success: true,
       data: {
-        project: { ...project, style_name: project.styles?.name ?? null },
+        project: { ...project, status: autoStatus, style_name: project.styles?.name ?? null },
         export_logs: logs ?? [],
       },
     });

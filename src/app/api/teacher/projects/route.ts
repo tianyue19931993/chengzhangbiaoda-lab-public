@@ -15,10 +15,31 @@ export async function GET() {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
-    const result = (projects ?? []).map((p: any) => ({
-      ...p,
-      style_name: p.styles?.name ?? null,
-    }));
+    const result = (projects ?? []).map((p: any) => {
+      // 自动判断状态：基于 URL 存在性
+      let autoStatus = p.status;
+      const hasStoryboard = !!p.storyboard_image_url;
+      const hasVideo = !!p.video_url;
+      
+      if (hasStoryboard && hasVideo) {
+        autoStatus = 'completed';
+      } else if (hasStoryboard || hasVideo) {
+        autoStatus = 'processing';
+      } else {
+        autoStatus = 'pending';
+      }
+      
+      // 保留 failed 状态
+      if (p.status === 'failed') {
+        autoStatus = 'failed';
+      }
+      
+      return {
+        ...p,
+        status: autoStatus,
+        style_name: p.styles?.name ?? null,
+      };
+    });
 
     return NextResponse.json({ success: true, data: { projects: result } });
   } catch (err: any) {
