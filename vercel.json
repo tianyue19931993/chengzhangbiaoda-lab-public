@@ -1,1 +1,12 @@
-{"buildCommand": "npm run build", "outputDirectory": ".next", "framework": "nextjs"}
+{
+  "$schema": "https://openapi.vercel.sh/vercel.schema.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/cleanup",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
