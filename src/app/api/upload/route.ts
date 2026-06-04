@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         style_id: styleId,
         original_image_url: uploadedImage,
         status: 'pending',
-        user_id: userId || undefined,
+        user_id: userId ? Number(userId) : undefined,
       })
       .select()
       .single();
@@ -79,6 +79,9 @@ export async function POST(request: NextRequest) {
     if (projectErr || !project) {
       return NextResponse.json({ success: false, error: '创建项目失败：' + (projectErr?.message ?? '未知错误') }, { status: 500 });
     }
+
+    // 如果是后端上传模式且用了临时 key，用正式格式重命名/更新 URL
+    // （前端直传模式下，key 已在 GET 接口中按正确格式生成）
 
     return NextResponse.json({
       success: true,
@@ -91,9 +94,30 @@ export async function POST(request: NextRequest) {
 }
 
 // GET - 获取七牛云上传凭证（前端直传用）
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const key = `original-images/${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}.jpg`;
+    const { searchParams } = new URL(request.url);
+    const projectId = searchParams.get('projectId');
+    const userId = searchParams.get('userId');
+    const childName = searchParams.get('childName') || '';
+    const projectName = searchParams.get('projectName') || '';
+    const styleId = searchParams.get('styleId') || 'pixar';
+
+    // 构造新格式文件名
+    let key: string;
+    if (projectId && userId) {
+      key = getQiniuKey('original', {
+        projectId: Number(projectId),
+        userId: Number(userId),
+        childName,
+        projectName,
+        styleId,
+      });
+    } else {
+      // 兼容旧模式
+      key = `original-images/${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}.jpg`;
+    }
+
     const token = generateUploadToken(key);
     const publicUrl = getPublicUrl(key);
 

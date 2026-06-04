@@ -52,14 +52,39 @@ export function getPublicUrl(key: string): string {
 }
 
 /**
- * 根据 format 映射到七牛云文件夹路径
+ * 构造七牛云文件路径（新格式）
+ * 
+ * 原图:   {project_id}_{user_id}_{child_name}_{project_name}_{style_id}
+ * 分镜图: {project_id}_{user_id}_{child_name}_{project_name}_{style_id}_分镜图
+ * 视频:   {project_id}_{user_id}_{child_name}_{project_name}_{style_id}_视频
  */
-export function getQiniuKey(format: 'video' | 'storyboard' | 'original', projectId: string | number, fileName: string): string {
+export interface QiniuKeyParams {
+  projectId: number;
+  userId?: number;
+  childName?: string;
+  projectName?: string;
+  styleId?: string;
+}
+
+export function getQiniuKey(
+  format: 'video' | 'storyboard' | 'original',
+  params: QiniuKeyParams | string,
+  fileName?: string
+): string {
   const folderMap = {
     video: 'videos',
     storyboard: 'generated-images',
     original: 'original-images',
   };
-  const ext = fileName.split('.').pop() || (format === 'video' ? 'mp4' : 'jpg');
-  return `${folderMap[format]}/${projectId}-${Date.now()}.${ext}`;
+  const ext = (fileName?.split('.').pop()) || (format === 'video' ? 'mp4' : 'jpg');
+
+  // 兼容旧调用方式（只传 projectId 字符串）
+  if (typeof params === 'string') {
+    return `${folderMap[format]}/${params}-${Date.now()}.${ext}`;
+  }
+
+  const { projectId, userId = 0, childName = '', projectName = '', styleId = '' } = params;
+  const suffix = format === 'video' ? '视频' : format === 'storyboard' ? '分镜图' : '';
+  const baseName = `${projectId}_${userId}_${childName}_${projectName}_${styleId}`;
+  return `${folderMap[format]}/${baseName}${suffix ? '_' + suffix : ''}.${ext}`;
 }

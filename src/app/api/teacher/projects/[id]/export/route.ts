@@ -30,9 +30,31 @@ export async function POST(
 
     // 更新项目字段
     const updateField = format === 'storyboard' ? 'storyboard_image_url' : 'video_url';
+
+    // 查询当前项目状态，判断是否需要更新为 completed
+    const { data: currentProj } = await supabaseAdmin
+      .from('projects')
+      .select('id, storyboard_image_url, video_url')
+      .eq('id', numId)
+      .single();
+
+    // 构建更新对象：设置文件 URL + 自动判断状态
+    const updateData: Record<string, any> = { [updateField]: fileUrl };
+    if (currentProj) {
+      const hasStoryboard = !!(format === 'storyboard' ? fileUrl : currentProj.storyboard_image_url);
+      const hasVideo = !!(format === 'video' ? fileUrl : currentProj.video_url);
+      if (hasStoryboard && hasVideo) {
+        updateData.status = 'completed';
+        updateData.completed_at = new Date().toISOString();
+      } else if (!currentProj.storyboard_image_url || !currentProj.video_url) {
+        updateData.status = 'processing';
+        updateData.processing_at = new Date().toISOString();
+      }
+    }
+
     const { error: updateErr } = await supabaseAdmin
       .from('projects')
-      .update({ [updateField]: fileUrl })
+      .update(updateData)
       .eq('id', numId);
 
     if (updateErr) {
@@ -71,11 +93,23 @@ export async function GET(
     }
 
     const { searchParams } = new URL(request.url);
-    const format = searchParams.get('format') || 'storyboard';
+    const format = (searchParams.get('format') as 'video' | 'storyboard') || 'storyboard';
     const fileName = searchParams.get('fileName') || (format === 'video' ? 'video.mp4' : 'image.png');
-    const contentType = searchParams.get('contentType') || (format === 'video' ? 'video/mp4' : 'image/png');
 
-    const qiniuKey = getQiniuKey(format as 'video' | 'storyboard', String(numId), fileName);
+    // 查询项目信息用于构造文件名
+    const { data: proj } = await supabaseAdmin
+      .from('projects')
+      .select('id, user_id, child_name, project_name, style_id')
+      .eq('id', numId)
+      .single();
+
+    const qiniuKey = getQiniuKey(format, {
+      projectId: numId,
+      userId: proj?.user_id,
+      childName: proj?.child_name ?? '',
+      projectName: proj?.project_name ?? '',
+      styleId: proj?.style_id ?? '',
+    }, fileName);
     const token = generateUploadToken(qiniuKey);
     const publicUrl = getPublicUrl(qiniuKey);
 

@@ -25,10 +25,21 @@ export async function GET(request: NextRequest) {
 
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
 
-    const projects = (data ?? []).map((p: any) => ({
-      ...p,
-      style_name: p.styles?.name ?? null,
-    }));
+    const projects = (data ?? []).map((p: any) => {
+      // 自动判断状态：storyboard 和 video 都有值 → completed，否则 processing
+      let autoStatus = p.status;
+      if (p.status !== 'completed' && p.status !== 'failed') {
+        const hasStoryboard = !!p.storyboard_image_url;
+        const hasVideo = !!p.video_url;
+        if (hasStoryboard && hasVideo) autoStatus = 'completed';
+        else if (hasStoryboard || hasVideo) autoStatus = 'processing';
+      }
+      return {
+        ...p,
+        status: autoStatus,
+        style_name: p.styles?.name ?? null,
+      };
+    });
 
     return NextResponse.json({
       success: true,

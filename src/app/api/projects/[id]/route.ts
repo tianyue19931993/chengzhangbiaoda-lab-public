@@ -25,8 +25,18 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 });
     }
 
+    // 自动判断状态
+    let autoStatus = project.status;
+    if (project.status !== 'completed' && project.status !== 'failed') {
+      const hasStoryboard = !!project.storyboard_image_url;
+      const hasVideo = !!project.video_url;
+      if (hasStoryboard && hasVideo) autoStatus = 'completed';
+      else if (hasStoryboard || hasVideo) autoStatus = 'processing';
+    }
+
     const result = {
       ...project,
+      status: autoStatus,
       style_name: project.styles?.name ?? null,
       user_name:        project.users?.name ?? null,
       user_institution: project.users?.institution ?? null,
