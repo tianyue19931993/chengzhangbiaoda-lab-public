@@ -10,9 +10,9 @@ const QINIU_SECRET_KEY = process.env.QINIU_SECRET_KEY || '';
 const QINIU_BUCKET = process.env.QINIU_BUCKET || 'chengzhangbiaoda-lab';
 const QINIU_DOMAIN = process.env.QINIU_DOMAIN || '';
 
-/** Base64 URL Safe 编码 */
+/** Base64 URL Safe 编码（保留 padding） */
 function urlSafeBase64(data: string | Buffer): string {
-  return Buffer.from(data).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return Buffer.from(data).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
 /**
@@ -29,12 +29,16 @@ export function generateUploadToken(key?: string, expiresSeconds = 3600): string
   };
 
   const policyStr = JSON.stringify(putPolicy);
-  const encoded = urlSafeBase64(policyStr);
-  const sign = urlSafeBase64(
-    Buffer.from(crypto.createHmac('sha1', QINIU_SECRET_KEY).update(encoded).digest())
-  );
+  // 1. 对 JSON 做 Base64 URL Safe 编码
+  const encodedPolicy = urlSafeBase64(policyStr);
 
-  return `${QINIU_ACCESS_KEY}:${sign}:${encoded}`;
+  // 2. 用 HMAC-SHA1 对 encodedPolicy 签名
+  const hmacDigest = crypto.createHmac('sha1', QINIU_SECRET_KEY).update(encodedPolicy).digest();
+
+  // 3. 对签名做 Base64 URL Safe 编码
+  const encodedSign = urlSafeBase64(hmacDigest);
+
+  return `${QINIU_ACCESS_KEY}:${encodedSign}:${encodedPolicy}`;
 }
 
 /**
