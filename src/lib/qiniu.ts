@@ -46,10 +46,9 @@ export function generateUploadToken(key?: string, expiresSeconds = 3600): string
  * @param key 文件路径
  */
 export function getPublicUrl(key: string): string {
-  if (QINIU_DOMAIN) {
-    return `${QINIU_DOMAIN}/${key}`;
-  }
-  return `https://${QINIU_BUCKET}.qiniucdn.com/${key}`;
+  let domain = QINIU_DOMAIN || `https://${QINIU_BUCKET}.qiniucdn.com`;
+  if (!domain.startsWith('http')) domain = 'https://' + domain;
+  return `${domain}/${key}`;
 }
 
 /**

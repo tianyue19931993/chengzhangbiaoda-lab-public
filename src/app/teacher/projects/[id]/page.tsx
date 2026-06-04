@@ -267,7 +267,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
               {uploadingVideo ? '上传中...' : '📎 上传视频'}
             </button>
           </div>
-          <p className="text-center text-gray-400 text-sm mt-2">视频直传七牛云，无大小限制</p>
+          
         </section>
 
         {/* 状态控制 */}
