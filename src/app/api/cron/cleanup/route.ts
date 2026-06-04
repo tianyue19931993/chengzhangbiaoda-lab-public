@@ -14,19 +14,26 @@ export const maxDuration = 300; // 5 分钟超时
  */
 
 export async function GET(request: NextRequest) {
-  // 验证是否来自 Vercel Cron
+  // 验证权限：支持两种方式
+  // 方式1: Vercel Cron 自动带 Authorization header (Bearer xxx)
+  // 方式2: 手动触发带 URL 参数 ?secret=xxx
   const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // 也支持手动触发（带 secret 参数）
   const { searchParams } = new URL(request.url);
   const secret = searchParams.get('secret');
-  if (secret && secret !== cronSecret) {
-    return NextResponse.json({ success: false, error: 'Invalid secret' }, { status: 401 });
+  const cronSecret = process.env.CRON_SECRET;
+  
+  // 如果设置了 CRON_SECRET，必须验证其中一种方式
+  if (cronSecret) {
+    const validByHeader = authHeader === `Bearer ${cronSecret}`;
+    const validByParam = secret === cronSecret;
+    
+    if (!validByHeader && !validByParam) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized', 
+        hint: '需要提供 Authorization header 或 ?secret= 参数' 
+      }, { status: 401 });
+    }
   }
 
   try {
