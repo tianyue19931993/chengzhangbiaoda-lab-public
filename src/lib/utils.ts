@@ -3,15 +3,17 @@
  * 数据库存储的是 UTC 时间（如 2026-06-02 03:36:59+00）
  * 前端需要显示为北京时间（UTC+8）
  */
-export function formatDateTime(utcString: string): string {
-  if (!utcString) return '';
-  
+function toBeijingTime(utcString: string): Date | null {
+  if (!utcString) return null;
   const date = new Date(utcString);
+  if (isNaN(date.getTime())) return null;
+  return new Date(date.getTime() + 8 * 60 * 60 * 1000);
+}
+
+export function formatDateTime(utcString: string): string {
+  const beijingTime = toBeijingTime(utcString);
+  if (!beijingTime) return '-';
   
-  // 转换为北京时间
-  const beijingTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  
-  // 格式化：2026-06-02 11:36
   const year = beijingTime.getUTCFullYear();
   const month = String(beijingTime.getUTCMonth() + 1).padStart(2, '0');
   const day = String(beijingTime.getUTCDate()).padStart(2, '0');
@@ -22,10 +24,8 @@ export function formatDateTime(utcString: string): string {
 }
 
 export function formatDate(utcString: string): string {
-  if (!utcString) return '';
-  
-  const date = new Date(utcString);
-  const beijingTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const beijingTime = toBeijingTime(utcString);
+  if (!beijingTime) return '-';
   
   const year = beijingTime.getUTCFullYear();
   const month = String(beijingTime.getUTCMonth() + 1).padStart(2, '0');

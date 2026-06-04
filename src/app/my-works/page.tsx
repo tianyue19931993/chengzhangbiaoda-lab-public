@@ -190,10 +190,10 @@ export default function MyWorksPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/projects?userId=${userId}`, { signal: AbortSignal.timeout(15000) });
+      const res = await fetch(`/api/projects?userId=${userId}`, { signal: AbortSignal.timeout(60000) });
       if (!res.ok) throw new Error(`服务器错误 ${res.status}`);
       const data = await res.json();
-      if (data.success) setAllProjects(data.data.projects ?? []);
+      if (data.success) setAllProjects(data.data?.projects ?? []);
       else setError(data.error ?? '加载失败');
     } catch (e: any) {
       if (e.name === 'TimeoutError') {
