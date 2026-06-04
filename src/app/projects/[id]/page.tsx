@@ -4,13 +4,16 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import KidButton from '@/components/KidButton';
+import { formatDate } from '@/lib/utils';
 
-// 中文日期格式（YYYY年M月D日），带 Invalid Date 防御
+// 中文日期格式（YYYY年M月D日）
 function formatChineseDate(dateStr: string): string {
   if (!dateStr) return '-';
-  const d = new Date(dateStr + 'T00:00:00');
-  if (isNaN(d.getTime())) return '-';
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  const formatted = formatDate(dateStr);
+  if (formatted === '-') return '-';
+  // 将 YYYY-MM-DD 转换为 YYYY年M月D日
+  const [year, month, day] = formatted.split('-');
+  return `${year}年${parseInt(month)}月${parseInt(day)}日`;
 }
 
 interface SelectedStudent {
