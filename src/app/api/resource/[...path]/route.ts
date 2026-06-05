@@ -37,11 +37,12 @@ function generateSignedUrl(key: string, expiresInSeconds = 3600): string {
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    // 1. 拼接文件路径
-    const key = params.path.join('/');
+    // 1. 拼接文件路径（Next.js 15+ params 是 Promise）
+    const resolvedParams = await params;
+    const key = resolvedParams.path.join('/');
     
     if (!key || key.includes('..')) {
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
@@ -95,10 +96,11 @@ export async function GET(
  */
 export async function HEAD(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const key = params.path.join('/');
+    const resolvedParams = await params;
+    const key = resolvedParams.path.join('/');
     
     if (!key || key.includes('..')) {
       return new NextResponse(null, { status: 400 });
