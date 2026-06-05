@@ -103,13 +103,19 @@ export async function GET(
       .eq('id', numId)
       .single();
 
-    const qiniuKey = getQiniuKey(format, {
+    // 生成带时间戳的 key，确保重新上传时不会和旧文件冲突
+    const baseKey = getQiniuKey(format, {
       projectId: numId,
       userId: proj?.user_id,
       childName: proj?.child_name ?? '',
       projectName: proj?.project_name ?? '',
       styleId: proj?.style_id ?? '',
     }, fileName);
+    // 在扩展名前插入时间戳，如: videos/xxx_1717612345.mp4
+    const dotIndex = baseKey.lastIndexOf('.');
+    const qiniuKey = dotIndex > 0
+      ? baseKey.slice(0, dotIndex) + '_' + String(Date.now()) + baseKey.slice(dotIndex)
+      : baseKey + '_' + String(Date.now());
     const token = generateUploadToken(qiniuKey);
     const publicUrl = getPublicUrl(qiniuKey);
 
