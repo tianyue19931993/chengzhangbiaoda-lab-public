@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
 const QINIU_ACCESS_KEY = process.env.QINIU_ACCESS_KEY || '';
 const QINIU_SECRET_KEY = process.env.QINIU_SECRET_KEY || '';
