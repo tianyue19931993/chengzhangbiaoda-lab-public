@@ -10,7 +10,8 @@ import crypto from 'node:crypto';
 
 const QINIU_ACCESS_KEY = process.env.QINIU_ACCESS_KEY || '';
 const QINIU_SECRET_KEY = process.env.QINIU_SECRET_KEY || '';
-const QINIU_ORIGIN = 'https://iovip-z0.qiniuio.com';
+// 使用 HTTP 让 Cloudflare Flexible SSL 生效（Cloudflare→七牛走 HTTP，绕过 SSL 证书不匹配）
+const QINIU_ORIGIN = 'http://czbd.digit3ds.com';
 const CDN_HOST = 'czbd.digit3ds.com';
 
 function generateSignedUrl(key: string, expiresInSeconds = 3600): string {
