@@ -27,9 +27,9 @@ function generateSignedUrl(key: string, expiresInSeconds = 3600): string {
  * /api/resource/videos/xxx.mp4  → videos/xxx.mp4
  * /api/resource/https://czbd.digit3ds.com/videos/xxx.mp4 → videos/xxx.mp4
  */
-function normalizeKey(pathSegment: string): string | null {
+function normalizeKey(pathSegment: string[]): string | null {
   // 清理路径段
-  let key = (pathSegment as string[]).join('/');
+  const key = pathSegment.join('/');
 
   // 情况1：新格式，直接就是 key
   if (!key.startsWith('http')) {
@@ -63,7 +63,7 @@ async function proxyFetch(key: string) {
 
 export async function GET(request: NextRequest, context: any) {
   try {
-    const key = normalizeKey(await context.params.then((p: any) => p.path));
+    const key = normalizeKey((await context.params).path);
 
     if (!key) {
       return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest, context: any) {
 
 export async function HEAD(request: NextRequest, context: any) {
   try {
-    const key = normalizeKey(await context.params.then((p: any) => p.params?.path ?? p.path));
+    const key = normalizeKey((await context.params).path);
 
     if (!key) {
       return new NextResponse(null, { status: 400 });
