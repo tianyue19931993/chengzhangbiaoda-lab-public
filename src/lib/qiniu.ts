@@ -8,7 +8,8 @@ const crypto = require('crypto');
 const QINIU_ACCESS_KEY = process.env.QINIU_ACCESS_KEY || '';
 const QINIU_SECRET_KEY = process.env.QINIU_SECRET_KEY || '';
 const QINIU_BUCKET = process.env.QINIU_BUCKET || 'chengzhangbiaoda-lab';
-const QINIU_DOMAIN = process.env.QINIU_DOMAIN || '';
+// QINIU_DOMAIN 不再使用，资源通过 /api/resource/ 代理访问
+// const QINIU_DOMAIN = process.env.QINIU_DOMAIN || '';
 
 /** Base64 URL Safe 编码（保留 padding） */
 function urlSafeBase64(data: string | Buffer): string {
@@ -35,12 +36,12 @@ export function generateUploadToken(key?: string, expiresSeconds = 3600): string
 }
 
 /**
- * 生成文件的公开访问 URL
+ * 生成文件的公开访问 URL（通过 Vercel 代理）
  */
 export function getPublicUrl(key: string): string {
-  let domain = QINIU_DOMAIN || `https://${QINIU_BUCKET}.qiniucdn.com`;
-  if (!domain.startsWith('http')) domain = 'https://' + domain;
-  return `${domain}/${key}`;
+  // 使用相对路径，通过 Vercel API 代理访问
+  // 这样所有资源都走同一个域名，避免 SSL 证书问题
+  return `/api/resource/${key}`;
 }
 
 /**
