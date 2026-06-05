@@ -19,7 +19,6 @@ function generateSignedUrl(key: string, expiresInSeconds = 3600): string {
   return `${url}&token=${QINIU_ACCESS_KEY}:${sign}`;
 }
 
-// @ts-expect-error - Next.js 15 catch-all route params type
 export async function GET(request: NextRequest, context: any) {
   try {
     const params = await context.params;
@@ -55,7 +54,6 @@ export async function GET(request: NextRequest, context: any) {
   }
 }
 
-// @ts-expect-error - Next.js 15 catch-all route params type
 export async function HEAD(request: NextRequest, context: any) {
   try {
     const params = await context.params;
