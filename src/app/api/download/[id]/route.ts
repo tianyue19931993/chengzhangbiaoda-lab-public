@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
+import { extractQiniuKey, getQiniuCdnUrl } from '@/lib/qiniu';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,9 +28,22 @@ export async function GET(
     }
 
     // 2. 服务端 fetch 视频文件
-    const videoRes = await fetch(project.video_url);
-    
+    // 旧 URL（czbd.digit3ds.com）SSL 证书不匹配，无法直接访问
+    // 从 URL 中提取 Qiniu key，通过 iovip-z0.qiniuio.com 直连获取
+    let videoFetchUrl = project.video_url;
+    try {
+      const qiniuKey = extractQiniuKey(project.video_url);
+      if (qiniuKey) {
+        videoFetchUrl = getQiniuCdnUrl(qiniuKey);
+      }
+    } catch (e) {
+      console.warn('[Download] Failed to extract qiniu key, using original URL:', e);
+    }
+
+    const videoRes = await fetch(videoFetchUrl, { signal: AbortSignal.timeout(60000) });
+
     if (!videoRes.ok || !videoRes.body) {
+      console.error('[Download] Failed to fetch video:', videoRes.status, videoFetchUrl);
       return NextResponse.json({ success: false, error: 'Failed to fetch video' }, { status: 500 });
     }
 

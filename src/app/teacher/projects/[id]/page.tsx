@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { normalizeUrl } from '@/lib/utils';
 
 interface Project {
   id: number;
@@ -217,7 +218,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
             <div className="bg-gray-50 rounded-2xl p-4">
               <div className="text-gray-500 text-sm mb-3">学生原图</div>
               {project.original_image_url ? (
-                <img src={project.original_image_url} alt="原图" className="w-full rounded-xl" />
+                <img src={normalizeUrl(project.original_image_url)} alt="原图" className="w-full rounded-xl" />
               ) : (
                 <div className="aspect-square bg-gray-200 rounded-xl flex items-center justify-center text-gray-400">暂无</div>
               )}
@@ -242,7 +243,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
                 </button>
               </div>
               {project.storyboard_image_url ? (
-                <img src={project.storyboard_image_url} alt="分镜图" className="w-full rounded-xl" />
+                <img src={normalizeUrl(project.storyboard_image_url)} alt="分镜图" className="w-full rounded-xl" />
               ) : (
                 <div className="aspect-square bg-gray-200 rounded-xl flex items-center justify-center text-gray-400">暂无</div>
               )}
@@ -267,7 +268,7 @@ export default function TeacherProjectDetail({ params }: { params: Promise<{ id:
                 </button>
               </div>
               {project.video_url ? (
-                <video src={project.video_url} controls className="w-full rounded-xl" />
+                <video src={normalizeUrl(project.video_url)} controls className="w-full rounded-xl" />
               ) : (
                 <div className="aspect-video bg-gray-200 rounded-xl flex items-center justify-center text-gray-400">暂无</div>
               )}

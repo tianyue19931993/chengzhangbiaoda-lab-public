@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import KidButton from '@/components/KidButton';
-import { formatDate } from '@/lib/utils';
+import { formatDate, normalizeUrl } from '@/lib/utils';
 
 // 中文日期格式（YYYY年M月D日）
 function formatChineseDate(dateStr: string): string {
@@ -176,7 +176,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div>
               <div className="text-gray-500 text-sm mb-2 font-medium">我的原图</div>
               {project.original_image_url ? (
-                <img src={project.original_image_url} alt="原图" className="w-full rounded-2xl shadow cursor-pointer hover:scale-105 transition-transform" onClick={() => setViewerSrc(project.original_image_url!)} />
+                <img src={normalizeUrl(project.original_image_url)} alt="原图" className="w-full rounded-2xl shadow cursor-pointer hover:scale-105 transition-transform" onClick={() => setViewerSrc(normalizeUrl(project.original_image_url))} />
               ) : (
                 <div className="aspect-square bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400">暂无</div>
               )}
@@ -185,7 +185,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div>
               <div className="text-gray-500 text-sm mb-2 font-medium">分镜图</div>
               {project.storyboard_image_url ? (
-                <img src={project.storyboard_image_url} alt="分镜图" className="w-full rounded-2xl shadow cursor-pointer hover:scale-105 transition-transform" onClick={() => setViewerSrc(project.storyboard_image_url!)} />
+                <img src={normalizeUrl(project.storyboard_image_url)} alt="分镜图" className="w-full rounded-2xl shadow cursor-pointer hover:scale-105 transition-transform" onClick={() => setViewerSrc(normalizeUrl(project.storyboard_image_url))} />
               ) : (
                 <div className="aspect-square bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400">等待老师上传</div>
               )}
@@ -194,7 +194,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <div>
               <div className="text-gray-500 text-sm mb-2 font-medium">我的视频</div>
               {project.video_url ? (
-                <video src={project.video_url} controls className="w-full rounded-2xl shadow" />
+                <video src={normalizeUrl(project.video_url)} controls className="w-full rounded-2xl shadow" />
               ) : (
                 <div className="aspect-video bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400">等待老师上传</div>
               )}

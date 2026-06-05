@@ -36,12 +36,38 @@ export function generateUploadToken(key?: string, expiresSeconds = 3600): string
 }
 
 /**
- * 生成文件的公开访问 URL（通过 Vercel 代理）
+ * 生成文件的公开访问 URL（统一走 /api/resource/ 代理）
+ * 兼容新旧两种格式：
+ * - key 为相对路径（如 videos/xxx.mp4）→ 转为 /api/resource/videos/xxx.mp4
+ * - key 为旧全 URL（如 https://czbd.digit3ds.com/videos/xxx.mp4）→ 原样返回，由前端 normalizeUrl 处理
  */
 export function getPublicUrl(key: string): string {
-  // 使用相对路径，通过 Vercel API 代理访问
-  // 这样所有资源都走同一个域名，避免 SSL 证书问题
+  if (key.startsWith('http')) {
+    // 已经是完整 URL（旧数据），前端会自动规范化
+    return key;
+  }
+  // 新格式：相对路径
   return `/api/resource/${key}`;
+}
+
+/**
+ * 规范化资源 URL：将旧 CDN URL 转为代理路径
+ * https://czbd.digit3ds.com/original-images/xxx.jpg → /api/resource/original-images/xxx.jpg
+ * https://czbd.digit3ds.com/videos/xxx.mp4 → /api/resource/videos/xxx.mp4
+ * /api/resource/xxx → /api/resource/xxx (不变)
+ * https://xxx → https://xxx (其他外部 URL 不变)
+ */
+export function normalizeUrl(url: string): string {
+  if (!url || !url.startsWith('http')) return url;
+
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname === 'czbd.digit3ds.com') {
+      return '/api/resource/' + urlObj.pathname.replace(/^\//, '');
+    }
+  } catch {}
+
+  return url;
 }
 
 /**
@@ -145,6 +171,15 @@ export interface QiniuKeyParams {
   childName?: string;
   projectName?: string;
   styleId?: string;
+}
+
+/**
+ * 生成 Qiniu CDN 公开访问 URL（无需签名，适合服务端 fetch）
+ * 使用 Qiniu 公开bucket + CDN 域名直连
+ */
+export function getQiniuCdnUrl(key: string): string {
+  const QINIU_CDN_ORIGIN = 'https://iovip-z0.qiniuio.com';
+  return `${QINIU_CDN_ORIGIN}/${key}`;
 }
 
 export function getQiniuKey(

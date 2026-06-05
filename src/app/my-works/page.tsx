@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import KidButton from '@/components/KidButton';
-import { formatDate } from '@/lib/utils';
+import { formatDate, normalizeUrl } from '@/lib/utils';
 
 interface Project {
   id: number;
@@ -271,9 +271,9 @@ export default function MyWorksPage() {
                     {/* 缩略图 */}
                     <div className="relative h-40 md:h-52 bg-gradient-to-r from-blue-200 to-purple-200 flex items-center justify-center overflow-hidden">
                       {p.storyboard_image_url ? (
-                        <img src={p.storyboard_image_url} alt="" className="w-full h-full object-cover" />
+                        <img src={normalizeUrl(p.storyboard_image_url)} alt="" className="w-full h-full object-cover" />
                       ) : p.original_image_url ? (
-                        <img src={p.original_image_url} alt="" className="w-full h-full object-cover" />
+                        <img src={normalizeUrl(p.original_image_url)} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <div className="text-7xl opacity-40">🎨</div>
                       )}

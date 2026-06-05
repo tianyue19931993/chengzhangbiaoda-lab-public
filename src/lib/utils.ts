@@ -62,3 +62,23 @@ export function formatDate(utcString: string): string {
   
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * 规范化资源 URL：将旧 CDN URL 转为 /api/resource/ 代理路径
+ * https://czbd.digit3ds.com/xxx → /api/resource/xxx
+ * /api/resource/xxx → /api/resource/xxx (不变)
+ * 其他外部 URL → 保持不变
+ */
+export function normalizeUrl(url: string | undefined | null): string {
+  if (!url) return url ?? '';
+  if (!url.startsWith('http')) return url;
+
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname === 'czbd.digit3ds.com') {
+      return '/api/resource/' + urlObj.pathname.replace(/^\//, '');
+    }
+  } catch {}
+
+  return url;
+}

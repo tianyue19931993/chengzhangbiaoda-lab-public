@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { formatDate } from '@/lib/utils';
+import { formatDate, normalizeUrl } from '@/lib/utils';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
@@ -246,7 +246,7 @@ export default function TeacherPage() {
                   {/* 图片区域 */}
                   <div className="relative h-36 md:h-48 bg-gradient-to-r from-orange-200 to-red-200 flex items-center justify-center overflow-hidden">
                     {p.original_image_url ? (
-                      <img src={p.original_image_url} alt="" className="w-full h-full object-cover" />
+                      <img src={normalizeUrl(p.original_image_url)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="text-7xl opacity-40">🎨</div>
                     )}
