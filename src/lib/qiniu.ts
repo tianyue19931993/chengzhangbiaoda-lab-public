@@ -179,7 +179,8 @@ export interface QiniuKeyParams {
  * 使用 Qiniu 公开bucket + CDN 域名直连
  */
 export function getQiniuCdnUrl(key: string): string {
-  const QINIU_CDN_ORIGIN = 'https://iovip-z0.qiniuio.com';
+  // 使用 HTTP 走 Cloudflare Flexible SSL（绕过七牛 SSL 证书不匹配问题）
+  const QINIU_CDN_ORIGIN = 'http://czbd.digit3ds.com';
   return `${QINIU_CDN_ORIGIN}/${key}`;
 }
 
