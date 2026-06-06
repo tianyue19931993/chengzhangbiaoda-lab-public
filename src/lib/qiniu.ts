@@ -25,6 +25,7 @@ export function generateUploadToken(key?: string, expiresSeconds = 3600): string
   const putPolicy: Record<string, unknown> = {
     scope: key ? `${QINIU_BUCKET}:${key}` : QINIU_BUCKET,
     deadline,
+    insertOnly: 0, // 允许覆盖已有文件
   };
 
   const policyStr = JSON.stringify(putPolicy);
