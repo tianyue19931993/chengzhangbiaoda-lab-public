@@ -212,6 +212,11 @@ export function getQiniuKey(
 export function extractQiniuKey(url: string): string | null {
   if (!url) return null;
   
+  // 如果是代理路径 /api/resource/xxx，提取后面的 key
+  if (url.startsWith('/api/resource/')) {
+    return url.slice('/api/resource/'.length);
+  }
+  
   // 如果是完整 URL，提取路径部分
   try {
     const urlObj = new URL(url);
