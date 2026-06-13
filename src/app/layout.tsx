@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-  title: '成长表达实验室',
-  description: '让孩子的创意变成动画',
+  title: '成长表达实验室 D',
+  description: '创意不设限，快来把想法变成动态惊喜吧～',
 };
 
 export default function RootLayout({

@@ -28,11 +28,11 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8">
-      <h1 className="text-6xl font-bold text-purple-600 mb-8 animate-bounce">
-        🎨 成长表达实验室 🎬
+      <h1 className="text-6xl font-bold text-purple-600 mb-8">
+        成长表达实验室 D
       </h1>
       <p className="text-2xl text-gray-700 mb-12 text-center">
-        上传你的创意，让 AI 帮你变成动画！
+        创意不设限，快来把想法变成动态惊喜吧～
       </p>
       
       <div className="space-y-6">
